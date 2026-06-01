@@ -65,7 +65,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
   <div class="btn-row">
     <button class="btn-download" onclick="submitDownload()">开始下载</button>
-    <button class="btn-bili" id="biliBtn" onclick="biliLogin()">登录B站</button>
+    <button class="btn-bili" id="btnBili" onclick="toggleBiliLogin()">登录B站</button>
   </div>
 </div>
 
@@ -107,6 +107,44 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 const SCRIPT_ROOT = "{{ request.script_root }}";
 const evtSource = new EventSource(SCRIPT_ROOT + '/api/events');
 const tasks = {};
+let bilibiliLoggedIn = false;
+
+// ---- B站登录状态 ----
+evtSource.addEventListener('status:bilibili_update', (e) => {
+  const d = JSON.parse(e.data);
+  bilibiliLoggedIn = d.logged_in;
+  updateBiliButton();
+});
+
+async function loadBiliStatus() {
+  try {
+    const resp = await fetch(SCRIPT_ROOT + '/api/status');
+    const data = await resp.json();
+    bilibiliLoggedIn = data.bilibili_logged_in;
+    updateBiliButton();
+  } catch(e) {}
+}
+loadBiliStatus();
+
+function updateBiliButton() {
+  const btn = document.getElementById('btnBili');
+  btn.textContent = bilibiliLoggedIn ? '退出B站' : '登录B站';
+  btn.style.background = bilibiliLoggedIn ? '#666' : '#fb7299';
+}
+
+function toggleBiliLogin() {
+  if (bilibiliLoggedIn) {
+    biliLogout();
+  } else {
+    biliLogin();
+  }
+}
+
+async function biliLogout() {
+  await fetch(SCRIPT_ROOT + '/api/bilibili-logout', {method: 'POST'});
+  bilibiliLoggedIn = false;
+  updateBiliButton();
+}
 
 evtSource.addEventListener('download:progress', (e) => {
   const d = JSON.parse(e.data);
@@ -135,38 +173,15 @@ evtSource.addEventListener('login:qrcode', (e) => {
   document.getElementById('qrArea').innerHTML = html;
 });
 evtSource.addEventListener('login:success', () => {
+  bilibiliLoggedIn = true;
+  updateBiliButton();
   document.getElementById('qrArea').innerHTML = '<p style="color:#4caf50">✅ 登录成功！</p>';
-  updateBiliStatus(true);
   setTimeout(closeQrModal, 1500);
 });
 evtSource.addEventListener('login:fail', (e) => {
   const d = JSON.parse(e.data);
   document.getElementById('qrArea').innerHTML = '<p style="color:#f44336">登录失败: ' + d.error + '</p>';
 });
-evtSource.addEventListener('status:bilibili_update', (e) => {
-  const d = JSON.parse(e.data);
-  updateBiliStatus(d.logged_in);
-});
-
-function updateBiliStatus(loggedIn) {
-  const btn = document.getElementById('biliBtn');
-  if (loggedIn) {
-    btn.textContent = '✅ 已登录B站';
-    btn.style.background = '#4caf50';
-  } else {
-    btn.textContent = '登录B站';
-    btn.style.background = '#fb7299';
-  }
-}
-
-async function loadBiliStatus() {
-  try {
-    const resp = await fetch(SCRIPT_ROOT + '/api/status');
-    const data = await resp.json();
-    updateBiliStatus(data.logged_in);
-  } catch (e) { /* ignore */ }
-}
-loadBiliStatus();
 
 async function loadTasks() {
   const resp = await fetch(SCRIPT_ROOT + '/api/tasks');

@@ -115,17 +115,35 @@ def api_login_bilibili():
 
     return {"task_id": tid}
 
+@api_bp.route("/api/bilibili-logout", methods=["POST"])
+@login_required
+def api_bilibili_logout():
+    """Log out from B站 — tell worker to delete BBDown.data."""
+    tq = current_app.config["task_queue"]
+    tid = tq.add_bilibili_logout()
+    tq.update(tid, username=session["user"])
+    logger.info(f"{session['user']} 退出B站登录")
+
+    # Immediately mark as not logged in for responsive UI
+    current_app.config["bilibili_logged_in"] = False
+    tq.sse_publish_global("status:bilibili_update", {"logged_in": False})
+
+    from worker_routes import notify_worker
+    notify_worker()
+
+    return {"ok": True}
+
 @api_bp.route("/api/tasks", methods=["GET"])
 @login_required
 def api_tasks():
     tq = current_app.config["task_queue"]
-    tasks = [t for t in tq.list_all() if t.get("type") != "login"]
+    tasks = [t for t in tq.list_all() if t.get("type") not in ("login", "bilibili_logout")]
     return jsonify(tasks)
 
 @api_bp.route("/api/status", methods=["GET"])
 @login_required
 def api_status():
-    return {"logged_in": current_app.config["bilibili_logged_in"]}
+    return {"bilibili_logged_in": current_app.config["bilibili_logged_in"]}
 
 @api_bp.route("/api/events")
 @login_required

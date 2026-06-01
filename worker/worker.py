@@ -1,4 +1,5 @@
 """BBDown worker — long-polls cloud server for tasks, executes BBDown, reports back."""
+
 import os
 import sys
 import json
@@ -20,10 +21,7 @@ logger = logging.getLogger("worker")
 CLOUD_URL = os.environ.get("CLOUD_URL", "http://127.0.0.1:5001")
 SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")
 BBDOWN_BIN = os.environ.get("BBDOWN_BIN", "BBDown")
-WORK_DIR = os.environ.get(
-    "WORK_DIR",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads"),
-)
+WORK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads")
 
 os.makedirs(WORK_DIR, exist_ok=True)
 
@@ -48,8 +46,11 @@ def run_bbdown_download(task: dict):
 
     logger.info(f"开始下载 {tid} {url} mode={mode}")
     proc = subprocess.Popen(
-        args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, cwd=WORK_DIR,
+        args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=WORK_DIR,
     )
 
     last_title = ""
@@ -75,8 +76,13 @@ def run_bbdown_download(task: dict):
                 try:
                     requests.post(
                         f"{CLOUD_URL}/api/worker/progress/{tid}",
-                        json={"title": last_title or url, "progress": progress, "speed": speed},
-                        headers=HEADERS, timeout=10,
+                        json={
+                            "title": last_title or url,
+                            "progress": progress,
+                            "speed": speed,
+                        },
+                        headers=HEADERS,
+                        timeout=10,
                     )
                 except Exception as e:
                     logger.warning(f"上报进度失败: {e}")
@@ -84,18 +90,30 @@ def run_bbdown_download(task: dict):
         proc.wait(timeout=3600)
     except subprocess.TimeoutExpired:
         proc.kill()
-        requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}", json={"error": "下载超时"}, headers=HEADERS)
+        requests.post(
+            f"{CLOUD_URL}/api/worker/fail/{tid}",
+            json={"error": "下载超时"},
+            headers=HEADERS,
+        )
         logger.error(f"下载超时 {tid}")
         return
 
     if proc.returncode != 0:
-        error_msg = "\n".join(output_lines[-10:]) if output_lines else "BBDown 返回非零退出码"
-        requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}", json={"error": error_msg}, headers=HEADERS)
+        error_msg = (
+            "\n".join(output_lines[-10:]) if output_lines else "BBDown 返回非零退出码"
+        )
+        requests.post(
+            f"{CLOUD_URL}/api/worker/fail/{tid}",
+            json={"error": error_msg},
+            headers=HEADERS,
+        )
         logger.error(f"下载失败 {tid} code={proc.returncode}")
         return
 
     # Find downloaded file
-    files = sorted(_glob.glob(os.path.join(WORK_DIR, "*")), key=os.path.getmtime, reverse=True)
+    files = sorted(
+        _glob.glob(os.path.join(WORK_DIR, "*")), key=os.path.getmtime, reverse=True
+    )
     downloaded = None
     for f in files:
         if os.path.isfile(f) and not f.endswith(".txt") and not f.endswith(".config"):
@@ -103,7 +121,11 @@ def run_bbdown_download(task: dict):
             break
 
     if not downloaded:
-        requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}", json={"error": "下载完成但找不到输出文件"}, headers=HEADERS)
+        requests.post(
+            f"{CLOUD_URL}/api/worker/fail/{tid}",
+            json={"error": "下载完成但找不到输出文件"},
+            headers=HEADERS,
+        )
         return
 
     fname = os.path.basename(downloaded)
@@ -124,7 +146,11 @@ def run_bbdown_download(task: dict):
             raise Exception(f"Server returned {resp.status_code}")
     except Exception as e:
         logger.error(f"上传失败 {tid}: {e}")
-        requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}", json={"error": f"上传失败: {e}"}, headers=HEADERS)
+        requests.post(
+            f"{CLOUD_URL}/api/worker/fail/{tid}",
+            json={"error": f"上传失败: {e}"},
+            headers=HEADERS,
+        )
 
 
 def run_bbdown_login(task: dict):
@@ -146,7 +172,9 @@ def run_bbdown_login(task: dict):
         # Start BBDown
         proc = subprocess.Popen(
             [BBDOWN_BIN, "login"],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
             cwd=WORK_DIR,
         )
 
@@ -164,8 +192,12 @@ def run_bbdown_login(task: dict):
                             b64 = base64.b64encode(f.read()).decode("ascii")
                         requests.post(
                             f"{CLOUD_URL}/api/worker/qrcode/{tid}",
-                            json={"qrcode": "[QR图片]", "image": f"data:image/png;base64,{b64}"},
-                            headers=HEADERS, timeout=10,
+                            json={
+                                "qrcode": "[QR图片]",
+                                "image": f"data:image/png;base64,{b64}",
+                            },
+                            headers=HEADERS,
+                            timeout=10,
                         )
                         os.remove(fpath)
                         qr_sent = True
@@ -177,8 +209,11 @@ def run_bbdown_login(task: dict):
 
         if not qr_sent:
             proc.kill()
-            requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
-                          json={"error": "等待二维码超时"}, headers=HEADERS)
+            requests.post(
+                f"{CLOUD_URL}/api/worker/fail/{tid}",
+                json={"error": "等待二维码超时"},
+                headers=HEADERS,
+            )
             logger.error(f"二维码超时 {tid}")
             return
 
@@ -187,17 +222,27 @@ def run_bbdown_login(task: dict):
             proc.wait(timeout=300)  # 5 minutes for user to scan
         except subprocess.TimeoutExpired:
             proc.kill()
-            requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
-                          json={"error": "登录超时（扫码超时）"}, headers=HEADERS)
+            requests.post(
+                f"{CLOUD_URL}/api/worker/fail/{tid}",
+                json={"error": "登录超时（扫码超时）"},
+                headers=HEADERS,
+            )
             logger.error(f"登录超时 {tid}")
             return
 
         if proc.returncode == 0 and cookie_available():
-            requests.post(f"{CLOUD_URL}/api/worker/login-success/{tid}", headers=HEADERS, timeout=10)
+            requests.post(
+                f"{CLOUD_URL}/api/worker/login-success/{tid}",
+                headers=HEADERS,
+                timeout=10,
+            )
             logger.info(f"B站登录成功 {tid}")
         else:
-            requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
-                          json={"error": f"登录失败，退出码 {proc.returncode}"}, headers=HEADERS)
+            requests.post(
+                f"{CLOUD_URL}/api/worker/fail/{tid}",
+                json={"error": f"登录失败，退出码 {proc.returncode}"},
+                headers=HEADERS,
+            )
             logger.error(f"B站登录失败 {tid} exit={proc.returncode}")
 
     t = _threading.Thread(target=_login_thread, daemon=True)
@@ -226,6 +271,13 @@ def main():
                 run_bbdown_download(task)
             elif task.get("type") == "login":
                 run_bbdown_login(task)
+            elif task.get("type") == "bilibili_logout":
+                # Delete BBDown.data — next poll will report cookie_available=false
+                if os.path.exists(BBDOWN_DATA_FILE):
+                    os.remove(BBDOWN_DATA_FILE)
+                    logger.info("已删除 BBDown.data（退出B站登录）")
+                else:
+                    logger.info("BBDown.data 不存在，无需删除")
             # "wait" type naturally loops back to poll
         except requests.exceptions.ReadTimeout:
             continue  # long poll timeout, re-poll

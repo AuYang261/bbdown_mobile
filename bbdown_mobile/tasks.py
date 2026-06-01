@@ -119,6 +119,20 @@ class TaskQueue:
         logger.info("Login task created: id=%s", tid)
         return tid
 
+    def add_bilibili_logout(self) -> str:
+        """Create a pending bilibili logout task.  Returns the new task ID."""
+        tid = self._generate_id()
+        task: dict = {
+            "id": tid,
+            "type": "bilibili_logout",
+            "status": "pending",
+        }
+        with self._lock:
+            self._tasks[tid] = task
+            self._pending_order.append(tid)
+        logger.info("Bilibili logout task created: id=%s", tid)
+        return tid
+
     # ------------------------------------------------------------------
     # task access
     # ------------------------------------------------------------------
