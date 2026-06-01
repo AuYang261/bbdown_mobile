@@ -6,57 +6,104 @@
 <title>BBDown 下载器</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f0f0f; color: #eee; padding-bottom: 40px; }
-.header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: #1a1a1a; position: sticky; top: 0; z-index: 10; }
-.header h1 { font-size: 18px; }
-.header-btns { display: flex; gap: 8px; }
-.header-btns button { padding: 8px 14px; font-size: 14px; background: #333; color: #eee; border: none; border-radius: 8px; cursor: pointer; }
-.form-area { padding: 16px 18px; }
-.form-area input[type="text"] { width: 100%; padding: 12px 14px; font-size: 16px; background: #1a1a1a; border: 1px solid #333; border-radius: 10px; color: #eee; margin-bottom: 12px; outline: none; -webkit-appearance: none; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f0f0f; color: #eee; min-height: 100vh; padding-bottom: 40px; }
+
+/* ---- header ---- */
+.header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: #1a1a1a; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #252525; }
+.header h1 { font-size: 18px; font-weight: 700; }
+.header-btns { display: flex; gap: 8px; align-items: center; }
+.header-btns button { padding: 7px 14px; font-size: 13px; background: #333; color: #ccc; border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+.header-btns button:active { background: #444; }
+.bili-status { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-right: 6px; }
+.bili-status.on { background: #1b3a2a; color: #4caf50; }
+.bili-status.off { background: #3a2a1b; color: #ff9800; }
+.bili-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.bili-status.on .bili-dot { background: #4caf50; }
+.bili-status.off .bili-dot { background: #ff9800; }
+
+/* ---- form ---- */
+.form-area { padding: 18px; }
+.form-area input[type="text"] { width: 100%; padding: 13px 15px; font-size: 16px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; color: #eee; margin-bottom: 14px; outline: none; -webkit-appearance: none; transition: border-color 0.2s; }
 .form-area input[type="text"]:focus { border-color: #00a1d6; }
-.mode-row { display: flex; gap: 16px; margin-bottom: 12px; align-items: center; font-size: 15px; }
-.mode-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.form-area input[type="text"]::placeholder { color: #555; }
+.mode-row { display: flex; gap: 20px; margin-bottom: 14px; align-items: center; font-size: 15px; }
+.mode-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: #bbb; }
+.mode-row input[type="radio"] { accent-color: #00a1d6; width: 16px; height: 16px; }
 .btn-row { display: flex; gap: 10px; }
-.btn-row button { flex: 1; padding: 12px; font-size: 16px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; -webkit-appearance: none; }
-.btn-download { background: #00a1d6; color: #fff; }
-.btn-bili { background: #fb7299; color: #fff; }
-.btn-download:active, .btn-bili:active { opacity: 0.8; }
-.section-title { padding: 8px 18px; font-size: 14px; color: #888; }
-.task-card { margin: 0 18px 10px; padding: 14px; background: #1a1a1a; border-radius: 12px; }
-.task-title { font-size: 15px; margin-bottom: 6px; word-break: break-all; }
-.task-info { font-size: 13px; color: #888; }
-.progress-bar { height: 4px; background: #333; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.btn-row button { flex: 1; padding: 13px; font-size: 15px; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; -webkit-appearance: none; transition: transform 0.1s, opacity 0.2s; }
+.btn-row button:active { transform: scale(0.97); }
+.btn-download { background: #00a1d6; color: #fff; box-shadow: 0 2px 8px rgba(0,161,214,0.25); }
+.btn-bili { color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.btn-bili.logged-out { background: #fb7299; }
+.btn-bili.logged-in { background: #555; }
+
+/* ---- section ---- */
+.section-title { padding: 10px 18px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+.empty-state { text-align: center; padding: 40px 20px; color: #444; font-size: 14px; }
+.empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+
+/* ---- task card ---- */
+.task-card { margin: 0 18px 10px; padding: 16px; background: #1a1a1a; border-radius: 12px; border: 1px solid #252525; }
+.task-title { font-size: 14px; margin-bottom: 8px; word-break: break-all; color: #ddd; }
+.task-meta { font-size: 12px; color: #777; display: flex; gap: 10px; align-items: center; }
+.task-badge { font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 600; }
+.task-badge.video { background: #1a3a4a; color: #4fc3f7; }
+.task-badge.audio { background: #1a3a2a; color: #81c784; }
+.progress-bar { height: 3px; background: #2a2a2a; border-radius: 2px; margin-top: 10px; overflow: hidden; }
 .progress-fill { height: 100%; background: #00a1d6; border-radius: 2px; transition: width 0.3s; }
 .task-completed .progress-fill { background: #4caf50; }
 .task-failed .progress-fill { background: #f44336; }
-.btn-save { display: inline-block; margin-top: 8px; padding: 8px 16px; background: #4caf50; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; }
-.task-error { color: #f44336; font-size: 13px; margin-top: 4px; }
-.warning-toast { position: fixed; top: 60px; left: 18px; right: 18px; padding: 12px 16px; background: #ff9800; color: #000; border-radius: 10px; font-size: 14px; z-index: 20; display: none; }
-.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 30; justify-content: center; align-items: flex-start; padding: 60px 20px 20px; }
+.btn-save { display: inline-block; margin-top: 10px; padding: 8px 18px; background: #4caf50; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn-save:active { opacity: 0.8; }
+.task-error { color: #f44336; font-size: 13px; margin-top: 6px; }
+.task-status { font-size: 12px; margin-top: 4px; }
+.task-status.pending { color: #888; }
+.task-status.downloading { color: #00a1d6; }
+
+/* ---- toast ---- */
+.warning-toast { position: fixed; top: 12px; left: 18px; right: 18px; padding: 12px 16px; background: #ff9800; color: #000; border-radius: 10px; font-size: 13px; font-weight: 600; z-index: 40; display: none; animation: slideDown 0.3s ease; box-shadow: 0 4px 16px rgba(255,152,0,0.3); }
+@keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* ---- modal ---- */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 50; justify-content: center; align-items: center; padding: 20px; }
 .modal-overlay.active { display: flex; }
-.modal { width: 100%; max-width: 360px; background: #1a1a1a; border-radius: 16px; padding: 24px; }
-.modal h2 { font-size: 18px; margin-bottom: 16px; }
+.modal { width: 100%; max-width: 340px; background: #1a1a1a; border-radius: 16px; padding: 24px; border: 1px solid #2a2a2a; }
+.modal h2 { font-size: 17px; margin-bottom: 14px; }
+.modal p { font-size: 14px; color: #aaa; margin-bottom: 18px; line-height: 1.5; }
 .modal input { width: 100%; padding: 10px 12px; font-size: 15px; background: #252525; border: 1px solid #333; border-radius: 8px; color: #eee; margin-bottom: 10px; outline: none; -webkit-appearance: none; }
-.modal button { padding: 10px 20px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; -webkit-appearance: none; }
+.modal input:focus { border-color: #00a1d6; }
+.modal button { padding: 10px 20px; font-size: 14px; border: none; border-radius: 8px; cursor: pointer; -webkit-appearance: none; font-weight: 600; transition: opacity 0.2s; }
+.modal button:active { opacity: 0.8; }
 .modal .btn-primary { background: #00a1d6; color: #fff; }
 .modal .btn-danger { background: #f44336; color: #fff; }
-.modal .btn-close { background: #444; color: #eee; }
-.modal .user-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #333; }
+.modal .btn-close { background: #444; color: #ccc; }
+.modal .btn-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+.modal .btn-row button { flex: none; }
+.modal .user-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #2a2a2a; }
+.modal .user-row span { font-size: 14px; }
 .modal .user-actions { display: flex; gap: 6px; }
-.qrcode-area { text-align: center; padding: 16px; }
+.modal .user-actions button { padding: 5px 12px; font-size: 13px; }
+.qrcode-area { text-align: center; padding: 8px 0; }
+.qrcode-area img { max-width: 100%; border-radius: 8px; }
 .qrcode-area pre { background: #fff; color: #000; display: inline-block; padding: 8px; font-size: 10px; line-height: 1.0; border-radius: 8px; overflow-x: auto; max-width: 100%; white-space: pre; }
-.qrcode-area .hint { color: #888; font-size: 13px; margin-top: 8px; }
+.qrcode-area .hint { color: #777; font-size: 13px; margin-top: 10px; }
 </style>
 </head>
 <body>
+
+<!-- header -->
 <div class="header">
   <h1>🎵 BBDown 下载器</h1>
   <div class="header-btns">
+    <span class="bili-status off" id="biliStatusBadge" title="B站登录状态">
+      <span class="bili-dot"></span> B站未登录
+    </span>
     {% if is_admin %}<button onclick="openUserModal()">管理</button>{% endif %}
     <button onclick="logout()">登出</button>
   </div>
 </div>
 
+<!-- form -->
 <div class="form-area">
   <input type="text" id="urlInput" placeholder="粘贴B站链接（BV号或完整URL）..." autofocus>
   <div class="mode-row">
@@ -64,26 +111,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <label><input type="radio" name="mode" value="audio"> 仅音频</label>
   </div>
   <div class="btn-row">
-    <button class="btn-download" onclick="submitDownload()">开始下载</button>
-    <button class="btn-bili" id="btnBili" onclick="toggleBiliLogin()">登录B站</button>
+    <button class="btn-download" onclick="submitDownload()">⬇ 开始下载</button>
+    <button class="btn-bili logged-out" id="btnBili" onclick="toggleBiliLogin()">登录B站</button>
   </div>
 </div>
 
+<!-- toast -->
 <div id="warningToast" class="warning-toast"></div>
-<div class="section-title">下载列表</div>
-<div id="taskList"></div>
 
-<!-- User management modal -->
+<!-- task list -->
+<div class="section-title">下载列表</div>
+<div id="taskList"><div class="empty-state"><div class="icon">📭</div>暂无下载任务<br>粘贴B站链接开始下载</div></div>
+
+<!-- user management modal -->
 <div class="modal-overlay" id="userModal">
   <div class="modal">
-    <h2>用户管理</h2>
+    <h2>👥 用户管理</h2>
     <div id="userList"></div>
     <div style="margin-top:16px">
       <input type="text" id="newUsername" placeholder="新用户名">
       <input type="password" id="newPassword" placeholder="密码">
-      <button class="btn-primary" onclick="addUser()">添加</button>
+      <button class="btn-primary" onclick="addUser()" style="width:100%">添加用户</button>
     </div>
-    <div style="margin-top:12px;text-align:right">
+    <div style="margin-top:14px;text-align:right">
       <button class="btn-close" onclick="closeUserModal()">关闭</button>
     </div>
     <div id="userError" style="color:#f44336;font-size:13px;margin-top:8px"></div>
@@ -93,12 +143,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <!-- QR login modal -->
 <div class="modal-overlay" id="qrModal">
   <div class="modal">
-    <h2>登录B站</h2>
+    <h2>📱 登录B站</h2>
     <div class="qrcode-area" id="qrArea">
       <p style="color:#888">正在生成二维码...</p>
     </div>
     <div style="text-align:right;margin-top:12px">
       <button class="btn-close" onclick="closeQrModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- confirm modal (reusable) -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <h2 id="confirmTitle">确认操作</h2>
+    <p id="confirmMsg"></p>
+    <div class="btn-row">
+      <button class="btn-close" onclick="closeConfirmModal()">取消</button>
+      <button class="btn-danger" id="confirmBtn" onclick="">确认</button>
     </div>
   </div>
 </div>
@@ -109,11 +171,11 @@ const evtSource = new EventSource(SCRIPT_ROOT + '/api/events');
 const tasks = {};
 let bilibiliLoggedIn = false;
 
-// ---- B站登录状态 ----
+// ===== B站登录状态 =====
 evtSource.addEventListener('status:bilibili_update', (e) => {
   const d = JSON.parse(e.data);
   bilibiliLoggedIn = d.logged_in;
-  updateBiliButton();
+  updateBiliUI();
 });
 
 async function loadBiliStatus() {
@@ -121,31 +183,58 @@ async function loadBiliStatus() {
     const resp = await fetch(SCRIPT_ROOT + '/api/status');
     const data = await resp.json();
     bilibiliLoggedIn = data.bilibili_logged_in;
-    updateBiliButton();
+    updateBiliUI();
   } catch(e) {}
 }
 loadBiliStatus();
 
-function updateBiliButton() {
+function updateBiliUI() {
   const btn = document.getElementById('btnBili');
-  btn.textContent = bilibiliLoggedIn ? '退出B站' : '登录B站';
-  btn.style.background = bilibiliLoggedIn ? '#666' : '#fb7299';
+  const badge = document.getElementById('biliStatusBadge');
+  if (bilibiliLoggedIn) {
+    btn.textContent = '退出B站';
+    btn.className = 'btn-bili logged-in';
+    badge.className = 'bili-status on';
+    badge.innerHTML = '<span class="bili-dot"></span> B站已登录';
+  } else {
+    btn.textContent = '登录B站';
+    btn.className = 'btn-bili logged-out';
+    badge.className = 'bili-status off';
+    badge.innerHTML = '<span class="bili-dot"></span> B站未登录';
+  }
 }
 
 function toggleBiliLogin() {
   if (bilibiliLoggedIn) {
-    biliLogout();
+    showConfirm('退出B站登录', '退出后下载高清晰度/大会员视频可能受限，确认退出？', async () => {
+      await fetch(SCRIPT_ROOT + '/api/bilibili-logout', {method: 'POST'});
+      bilibiliLoggedIn = false;
+      updateBiliUI();
+    });
   } else {
     biliLogin();
   }
 }
 
-async function biliLogout() {
-  await fetch(SCRIPT_ROOT + '/api/bilibili-logout', {method: 'POST'});
-  bilibiliLoggedIn = false;
-  updateBiliButton();
+// ===== confirm modal =====
+let _confirmCallback = null;
+
+function showConfirm(title, msg, callback) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMsg').textContent = msg;
+  _confirmCallback = callback;
+  document.getElementById('confirmModal').classList.add('active');
+}
+document.getElementById('confirmBtn').addEventListener('click', () => {
+  document.getElementById('confirmModal').classList.remove('active');
+  if (_confirmCallback) { _confirmCallback(); _confirmCallback = null; }
+});
+function closeConfirmModal() {
+  document.getElementById('confirmModal').classList.remove('active');
+  _confirmCallback = null;
 }
 
+// ===== SSE events =====
 evtSource.addEventListener('download:progress', (e) => {
   const d = JSON.parse(e.data);
   tasks[d.task_id] = Object.assign(tasks[d.task_id] || {}, d, {status: 'downloading'});
@@ -165,24 +254,25 @@ evtSource.addEventListener('login:qrcode', (e) => {
   const d = JSON.parse(e.data);
   let html = '';
   if (d.image) {
-    html = '<img src="' + d.image + '" style="max-width:100%;border-radius:8px" alt="QR">' +
-           '<p class="hint">截屏后到B站App → 扫一扫 → 选相册 → 扫码</p>';
+    html = '<img src="' + d.image + '" alt="QR">' +
+           '<p class="hint">截屏后用B站App → 扫一扫 → 相册 → 扫码</p>';
   } else {
-    html = '<pre>' + d.qrcode + '</pre><p class="hint">截屏后到B站App → 扫一扫 → 选相册 → 扫码</p>';
+    html = '<pre>' + d.qrcode + '</pre><p class="hint">截屏后用B站App → 扫一扫 → 相册 → 扫码</p>';
   }
   document.getElementById('qrArea').innerHTML = html;
 });
 evtSource.addEventListener('login:success', () => {
   bilibiliLoggedIn = true;
-  updateBiliButton();
-  document.getElementById('qrArea').innerHTML = '<p style="color:#4caf50">✅ 登录成功！</p>';
+  updateBiliUI();
+  document.getElementById('qrArea').innerHTML = '<p style="color:#4caf50;font-size:16px">✅ 登录成功！</p>';
   setTimeout(closeQrModal, 1500);
 });
 evtSource.addEventListener('login:fail', (e) => {
   const d = JSON.parse(e.data);
-  document.getElementById('qrArea').innerHTML = '<p style="color:#f44336">登录失败: ' + d.error + '</p>';
+  document.getElementById('qrArea').innerHTML = '<p style="color:#f44336">❌ 登录失败: ' + d.error + '</p>';
 });
 
+// ===== tasks =====
 async function loadTasks() {
   const resp = await fetch(SCRIPT_ROOT + '/api/tasks');
   const data = await resp.json();
@@ -202,7 +292,7 @@ async function submitDownload() {
   const data = await resp.json();
   if (data.warning) {
     const toast = document.getElementById('warningToast');
-    toast.textContent = data.warning;
+    toast.textContent = '⚠ ' + data.warning;
     toast.style.display = 'block';
     setTimeout(() => { toast.style.display = 'none'; }, 5000);
   }
@@ -225,27 +315,34 @@ function closeQrModal() {
 function renderTasks() {
   const container = document.getElementById('taskList');
   const list = Object.values(tasks).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  if (!list.length) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">📭</div>暂无下载任务<br>粘贴B站链接开始下载</div>';
+    return;
+  }
   container.innerHTML = list.map(t => {
     const pct = Math.round((t.progress || 0) * 100);
-    let extra = '';
+    const modeBadge = t.mode === 'audio' ? '<span class="task-badge audio">🎵 音频</span>' : '<span class="task-badge video">🎬 视频</span>';
+    let body = '';
     let cssClass = '';
     if (t.status === 'downloading') {
-      extra = '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
-              '<div class="task-info">' + pct + '% · ' + (t.speed || '') + '</div>';
+      body = '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
+             '<div class="task-status downloading">' + pct + '% · ' + (t.speed || '') + '</div>';
     } else if (t.status === 'completed') {
-      extra = '<a class="btn-save" href="' + SCRIPT_ROOT + '/api/file/' + t.id + '">💾 保存文件</a>';
+      body = '<a class="btn-save" href="' + SCRIPT_ROOT + '/api/file/' + t.id + '">💾 保存文件</a>';
       cssClass = ' task-completed';
     } else if (t.status === 'failed') {
-      extra = '<div class="task-error">❌ ' + (t.error || '下载失败') + '</div>';
+      body = '<div class="task-error">❌ ' + (t.error || '下载失败') + '</div>';
       cssClass = ' task-failed';
     } else {
-      extra = '<div class="task-info">⏳ 等待中...</div>';
+      body = '<div class="task-status pending">⏳ 等待中...</div>';
     }
-    return '<div class="task-card' + cssClass + '"><div class="task-title">' +
-           (t.title || t.url || '(无标题)') + '</div>' + extra + '</div>';
+    return '<div class="task-card' + cssClass + '">' +
+           '<div class="task-title">' + (t.title || t.url || '(无标题)') + '</div>' +
+           '<div class="task-meta">' + modeBadge + '</div>' + body + '</div>';
   }).join('');
 }
 
+// ===== user management =====
 async function openUserModal() {
   document.getElementById('userModal').classList.add('active');
   await loadUserList();
@@ -263,7 +360,6 @@ async function loadUserList() {
     '</div></div>'
   ).join('');
 }
-
 async function addUser() {
   const u = document.getElementById('newUsername').value.trim();
   const p = document.getElementById('newPassword').value;
@@ -281,20 +377,19 @@ async function addUser() {
     document.getElementById('userError').textContent = data.error;
   }
 }
-
 async function removeUser(username) {
-  if (!confirm('确认删除用户 ' + username + '？')) return;
-  const resp = await fetch(SCRIPT_ROOT + '/api/users/remove', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({username})
+  showConfirm('删除用户', '确认删除用户「' + username + '」？此操作不可撤销。', async () => {
+    const resp = await fetch(SCRIPT_ROOT + '/api/users/remove', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username})
+    });
+    const data = await resp.json();
+    if (data.ok) loadUserList();
+    else alert(data.error);
   });
-  const data = await resp.json();
-  if (data.ok) loadUserList();
-  else alert(data.error);
 }
-
 async function changePwdPrompt(username) {
-  const newPw = prompt('输入 ' + username + ' 的新密码（管理员可强制重置）');
+  const newPw = prompt('输入「' + username + '」的新密码（管理员可强制重置）');
   if (!newPw) return;
   const resp = await fetch(SCRIPT_ROOT + '/api/users/change-password', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -303,7 +398,6 @@ async function changePwdPrompt(username) {
   const data = await resp.json();
   alert(data.ok ? '密码已更新' : data.error);
 }
-
 async function logout() {
   await fetch(SCRIPT_ROOT + '/api/logout', {method: 'POST'});
   window.location.href = SCRIPT_ROOT + '/login';
