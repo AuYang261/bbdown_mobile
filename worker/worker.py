@@ -150,88 +150,41 @@ def run_bbdown_login(task: dict):
     if script_dir not in watch_dirs:
         watch_dirs.append(script_dir)
 
-    args = [BBDOWN_BIN, "login"]
-    proc = subprocess.Popen(
-        args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    # Start BBDown in background — it will keep running until user scans
+    subprocess.Popen(
+        [BBDOWN_BIN, "login"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         cwd=WORK_DIR,
     )
 
-    qr_sent = False
-
-    # ------------------------------------------------------------------
-    # helper: find qrcode.png, read + base64, upload, delete
-    # ------------------------------------------------------------------
-    def try_send_qrcode_png() -> bool:
-        """Look for qrcode.png in watch dirs. If found, send it and delete."""
-        nonlocal qr_sent
-        if qr_sent:
-            return True
+    # Wait for qrcode.png to appear, then send it and return immediately
+    deadline = time.time() + 120
+    while time.time() < deadline:
         for d in watch_dirs:
             fpath = os.path.join(d, "qrcode.png")
             if os.path.isfile(fpath):
                 try:
-                    # Wait a moment to ensure the file is fully written
-                    time.sleep(0.3)
+                    time.sleep(0.3)  # let BBDown finish writing
                     with open(fpath, "rb") as f:
                         b64 = base64.b64encode(f.read()).decode("ascii")
-                    payload = {
-                        "qrcode": "[QR图片]",
-                        "image": f"data:image/png;base64,{b64}",
-                    }
                     requests.post(
                         f"{CLOUD_URL}/api/worker/qrcode/{tid}",
-                        json=payload, headers=HEADERS, timeout=10,
+                        json={"qrcode": "[QR图片]", "image": f"data:image/png;base64,{b64}"},
+                        headers=HEADERS, timeout=10,
                     )
-                    qr_sent = True
-                    logger.info(f"二维码已上报 {tid}")
-                    # Delete the QR file after upload
                     os.remove(fpath)
-                    logger.info(f"已删除二维码文件 {fpath}")
-                    return True
+                    logger.info(f"二维码已上报并删除 {tid}")
+                    # BBDown keeps running; user scans at their own pace.
+                    # The next poll will report cookie_available=true once logged in.
+                    return
                 except Exception as e:
-                    logger.warning(f"处理二维码图片失败: {e}")
-                    return False
-        return False
+                    logger.warning(f"处理二维码失败: {e}")
+        time.sleep(1)
 
-    # ------------------------------------------------------------------
-    # wait for qrcode.png to appear, then BBDown to exit
-    # ------------------------------------------------------------------
-    deadline = time.time() + 120
-    try:
-        # Phase 1: wait for QR PNG
-        while not qr_sent and proc.poll() is None and time.time() < deadline:
-            try_send_qrcode_png()
-            time.sleep(1)
-
-        # Phase 2: wait for BBDown to finish (user scanning)
-        while proc.poll() is None and time.time() < deadline:
-            time.sleep(1)
-
-        if proc.poll() is None:
-            proc.kill()
-            requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
-                          json={"error": "登录超时"}, headers=HEADERS)
-            return
-    except Exception:
-        proc.kill()
-        raise
-
-    # Capture remaining stdout for error reporting
-    output_all = ""
-    try:
-        remaining, _ = proc.communicate(timeout=5)
-        output_all = remaining or ""
-    except Exception:
-        pass
-
-    if proc.returncode == 0 and cookie_available():
-        requests.post(f"{CLOUD_URL}/api/worker/login-success/{tid}", headers=HEADERS, timeout=10)
-        logger.info("B站登录成功")
-    else:
-        tail = output_all[-200:] if output_all else "(无输出)"
-        requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
-                      json={"error": f"登录失败: {tail}"}, headers=HEADERS)
-        logger.error("B站登录失败")
+    # QR file never appeared
+    requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
+                  json={"error": "等待二维码超时"}, headers=HEADERS)
+    logger.error(f"二维码超时 {tid}")
 
 
 def main():
