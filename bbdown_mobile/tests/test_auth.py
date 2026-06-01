@@ -1,8 +1,9 @@
 import sys
 import os
+import time
 import tempfile
 sys.path.insert(0, '.')
-from auth import hash_password, verify_password
+from auth import hash_password, verify_password, RateLimiter
 from users import UserStore
 
 
@@ -77,6 +78,38 @@ def test_user_store_persists_to_disk():
     assert store2.verify("alice", "pass1") is True
 
 
+def test_rate_limiter_allows_first_five():
+    rl = RateLimiter(max_failures=5, window_sec=300, lockout_sec=900)
+    for _ in range(5):
+        assert rl.is_blocked("1.2.3.4") is False
+        rl.record_failure("1.2.3.4")
+
+
+def test_rate_limiter_blocks_sixth():
+    rl = RateLimiter(max_failures=5, window_sec=300, lockout_sec=900)
+    for _ in range(5):
+        rl.record_failure("1.2.3.4")
+    assert rl.is_blocked("1.2.3.4") is True
+
+
+def test_rate_limiter_different_ips_independent():
+    rl = RateLimiter(max_failures=5, window_sec=300, lockout_sec=900)
+    for _ in range(5):
+        rl.record_failure("1.2.3.4")
+    assert rl.is_blocked("1.2.3.4") is True
+    assert rl.is_blocked("5.6.7.8") is False
+
+
+def test_rate_limiter_reset_on_success():
+    rl = RateLimiter(max_failures=5, window_sec=300, lockout_sec=900)
+    for _ in range(3):
+        rl.record_failure("1.2.3.4")
+    rl.reset("1.2.3.4")
+    for _ in range(5):
+        assert rl.is_blocked("1.2.3.4") is False
+        rl.record_failure("1.2.3.4")
+
+
 if __name__ == "__main__":
     tests = [
         test_hash_password_returns_salt_and_hash,
@@ -88,6 +121,10 @@ if __name__ == "__main__":
         test_user_store_list,
         test_user_store_change_password,
         test_user_store_persists_to_disk,
+        test_rate_limiter_allows_first_five,
+        test_rate_limiter_blocks_sixth,
+        test_rate_limiter_different_ips_independent,
+        test_rate_limiter_reset_on_success,
     ]
     passed = 0
     failed = 0
