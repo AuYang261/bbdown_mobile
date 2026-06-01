@@ -36,6 +36,10 @@ def create_app(instance_path: str | None = None) -> Flask:
         stream=sys.stdout,
     )
 
+    # --- Support sub-path reverse proxy (e.g. /bbdown) ---
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
+
     # --- Shared state ---
     users_path = os.path.join(app.instance_path, "users.json")
     os.makedirs(app.instance_path, exist_ok=True)
