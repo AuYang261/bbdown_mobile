@@ -9,17 +9,26 @@
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f0f0f; color: #eee; min-height: 100vh; padding-bottom: 40px; }
 
 /* ---- header ---- */
-.header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: #1a1a1a; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #252525; }
-.header h1 { font-size: 18px; font-weight: 700; }
-.header-btns { display: flex; gap: 8px; align-items: center; }
-.header-btns button { padding: 7px 14px; font-size: 13px; background: #333; color: #ccc; border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+.header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #1a1a1a; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #252525; }
+.header h1 { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.header-btns { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.header-btns button { padding: 6px 10px; font-size: 12px; background: #333; color: #ccc; border: none; border-radius: 7px; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
 .header-btns button:active { background: #444; }
-.bili-status { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-right: 6px; }
+.bili-status { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 5px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .bili-status.on { background: #1b3a2a; color: #4caf50; }
 .bili-status.off { background: #3a2a1b; color: #ff9800; }
-.bili-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.bili-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .bili-status.on .bili-dot { background: #4caf50; }
 .bili-status.off .bili-dot { background: #ff9800; }
+/* narrow screen: collapse status badge to dot + icon only */
+@media (max-width: 380px) {
+  .header { padding: 10px 12px; }
+  .header h1 { font-size: 15px; }
+  .bili-status .bili-text { display: none; }
+  .bili-status { padding: 4px 6px; }
+  .header-btns { gap: 4px; }
+  .header-btns button { padding: 5px 8px; font-size: 11px; }
+}
 
 /* ---- form ---- */
 .form-area { padding: 18px; }
@@ -96,7 +105,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <h1>🎵 BBDown 下载器</h1>
   <div class="header-btns">
     <span class="bili-status off" id="biliStatusBadge" title="B站登录状态">
-      <span class="bili-dot"></span> B站未登录
+      <span class="bili-dot"></span> <span class="bili-text">B站未登录</span>
     </span>
     {% if is_admin %}<button onclick="openUserModal()">管理</button>{% endif %}
     <button onclick="logout()">登出</button>
@@ -195,12 +204,12 @@ function updateBiliUI() {
     btn.textContent = '退出B站';
     btn.className = 'btn-bili logged-in';
     badge.className = 'bili-status on';
-    badge.innerHTML = '<span class="bili-dot"></span> B站已登录';
+    badge.innerHTML = '<span class="bili-dot"></span> <span class="bili-text">B站已登录</span>';
   } else {
     btn.textContent = '登录B站';
     btn.className = 'btn-bili logged-out';
     badge.className = 'bili-status off';
-    badge.innerHTML = '<span class="bili-dot"></span> B站未登录';
+    badge.innerHTML = '<span class="bili-dot"></span> <span class="bili-text">B站未登录</span>';
   }
 }
 
