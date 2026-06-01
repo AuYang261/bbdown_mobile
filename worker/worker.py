@@ -128,52 +128,80 @@ def run_bbdown_download(task: dict):
 
 
 def run_bbdown_login(task: dict):
-    tid = task["id"]
-    logger.info(f"开始B站登录流程 {tid}")
-
+    """Start B站 login in a background thread — non-blocking for the worker."""
     import base64
+    import threading as _threading
 
-    # BBDown may write QR PNG to WORK_DIR; also watch the script dir as fallback
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    watch_dirs = [WORK_DIR]
-    if script_dir not in watch_dirs:
-        watch_dirs.append(script_dir)
+    tid = task["id"]
 
-    # Start BBDown in background — it will keep running until user scans
-    subprocess.Popen(
-        [BBDOWN_BIN, "login"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        cwd=WORK_DIR,
-    )
+    def _login_thread():
+        logger.info(f"开始B站登录流程 {tid}")
 
-    # Wait for qrcode.png to appear, then send it and return immediately
-    deadline = time.time() + 120
-    while time.time() < deadline:
-        for d in watch_dirs:
-            fpath = os.path.join(d, "qrcode.png")
-            if os.path.isfile(fpath):
-                try:
-                    time.sleep(0.3)  # let BBDown finish writing
-                    with open(fpath, "rb") as f:
-                        b64 = base64.b64encode(f.read()).decode("ascii")
-                    requests.post(
-                        f"{CLOUD_URL}/api/worker/qrcode/{tid}",
-                        json={"qrcode": "[QR图片]", "image": f"data:image/png;base64,{b64}"},
-                        headers=HEADERS, timeout=10,
-                    )
-                    os.remove(fpath)
-                    logger.info(f"二维码已上报并删除 {tid}")
-                    # BBDown keeps running; user scans at their own pace.
-                    # The next poll will report cookie_available=true once logged in.
-                    return
-                except Exception as e:
-                    logger.warning(f"处理二维码失败: {e}")
-        time.sleep(1)
+        # BBDown may write QR PNG to WORK_DIR; also watch the script dir as fallback
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        watch_dirs = [WORK_DIR]
+        if script_dir not in watch_dirs:
+            watch_dirs.append(script_dir)
 
-    # QR file never appeared
-    requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
-                  json={"error": "等待二维码超时"}, headers=HEADERS)
-    logger.error(f"二维码超时 {tid}")
+        # Start BBDown
+        proc = subprocess.Popen(
+            [BBDOWN_BIN, "login"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            cwd=WORK_DIR,
+        )
+
+        qr_sent = False
+
+        # ---- Phase 1: wait for qrcode.png ----
+        qr_deadline = time.time() + 120
+        while not qr_sent and proc.poll() is None and time.time() < qr_deadline:
+            for d in watch_dirs:
+                fpath = os.path.join(d, "qrcode.png")
+                if os.path.isfile(fpath):
+                    try:
+                        time.sleep(0.3)
+                        with open(fpath, "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode("ascii")
+                        requests.post(
+                            f"{CLOUD_URL}/api/worker/qrcode/{tid}",
+                            json={"qrcode": "[QR图片]", "image": f"data:image/png;base64,{b64}"},
+                            headers=HEADERS, timeout=10,
+                        )
+                        os.remove(fpath)
+                        qr_sent = True
+                        logger.info(f"二维码已上报并删除 {tid}")
+                        break
+                    except Exception as e:
+                        logger.warning(f"处理二维码失败: {e}")
+            time.sleep(1)
+
+        if not qr_sent:
+            proc.kill()
+            requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
+                          json={"error": "等待二维码超时"}, headers=HEADERS)
+            logger.error(f"二维码超时 {tid}")
+            return
+
+        # ---- Phase 2: wait for user to scan (BBDown exits on success/failure) ----
+        try:
+            proc.wait(timeout=300)  # 5 minutes for user to scan
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
+                          json={"error": "登录超时（扫码超时）"}, headers=HEADERS)
+            logger.error(f"登录超时 {tid}")
+            return
+
+        if proc.returncode == 0 and cookie_available():
+            requests.post(f"{CLOUD_URL}/api/worker/login-success/{tid}", headers=HEADERS, timeout=10)
+            logger.info(f"B站登录成功 {tid}")
+        else:
+            requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
+                          json={"error": f"登录失败，退出码 {proc.returncode}"}, headers=HEADERS)
+            logger.error(f"B站登录失败 {tid} exit={proc.returncode}")
+
+    t = _threading.Thread(target=_login_thread, daemon=True)
+    t.start()
 
 
 def main():
