@@ -30,6 +30,8 @@ button:active { opacity: 0.8; }
   </form>
 </div>
 <script>
+const SCRIPT_ROOT = "{{ request.script_root }}";
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const u = document.getElementById('username').value.trim();
@@ -38,13 +40,13 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   errEl.style.display = 'none';
   if (!u || !p) { errEl.textContent = '请输入用户名和密码'; errEl.style.display = 'block'; return; }
   try {
-    const resp = await fetch('/api/login', {
+    const resp = await fetch(SCRIPT_ROOT + '/api/login', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({username: u, password: p})
     });
     const data = await resp.json();
     if (resp.ok && data.ok) {
-      window.location.href = '/';
+      window.location.href = SCRIPT_ROOT + '/';
     } else {
       errEl.textContent = data.error || '登录失败';
       errEl.style.display = 'block';
