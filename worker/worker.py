@@ -20,10 +20,6 @@ logger = logging.getLogger("worker")
 CLOUD_URL = os.environ.get("CLOUD_URL", "http://127.0.0.1:5001")
 SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")
 BBDOWN_BIN = os.environ.get("BBDOWN_BIN", "BBDown")
-BBDOWN_COOKIE_FILE = os.environ.get(
-    "BBDOWN_COOKIE_FILE",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "bbdown_cookie.txt"),
-)
 WORK_DIR = os.environ.get(
     "WORK_DIR",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads"),
@@ -33,18 +29,12 @@ os.makedirs(WORK_DIR, exist_ok=True)
 
 HEADERS = {"Authorization": f"Bearer {SECRET_TOKEN}"}
 
+# BBDown login saves session to BBDown.data; BBDown reads it automatically from cwd / --work-dir
+BBDOWN_DATA_FILE = os.path.join(WORK_DIR, "BBDown.data")
+
 
 def cookie_available() -> bool:
-    return os.path.exists(BBDOWN_COOKIE_FILE) and os.path.getsize(BBDOWN_COOKIE_FILE) > 0
-
-
-def make_cookie_args() -> list[str]:
-    if cookie_available():
-        with open(BBDOWN_COOKIE_FILE) as f:
-            cookie = f.read().strip()
-        if cookie:
-            return ["-c", cookie]
-    return []
+    return os.path.exists(BBDOWN_DATA_FILE) and os.path.getsize(BBDOWN_DATA_FILE) > 0
 
 
 def run_bbdown_download(task: dict):
@@ -55,7 +45,6 @@ def run_bbdown_download(task: dict):
     args = [BBDOWN_BIN, "-tv", url, "--work-dir", WORK_DIR]
     if mode == "audio":
         args.append("--audio-only")
-    args.extend(make_cookie_args())
 
     logger.info(f"开始下载 {tid} {url} mode={mode}")
     proc = subprocess.Popen(

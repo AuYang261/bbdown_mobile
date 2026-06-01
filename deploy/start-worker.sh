@@ -8,7 +8,6 @@ set -e
 export CLOUD_URL="https://<你的域名>"
 export SECRET_TOKEN="<与云服务器一致>"
 export BBDOWN_BIN="BBDown"
-export BBDOWN_COOKIE_FILE=""   # 留空使用默认路径 ./bbdown_cookie.txt
 export WORK_DIR=""             # 留空使用默认路径 ./downloads
 # =============================
 
