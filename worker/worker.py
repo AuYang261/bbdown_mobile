@@ -143,21 +143,12 @@ def run_bbdown_login(task: dict):
     logger.info(f"开始B站登录流程 {tid}")
 
     import base64
-    import threading as _threading
 
     # BBDown may write QR PNG to WORK_DIR; also watch the script dir as fallback
     script_dir = os.path.dirname(os.path.abspath(__file__))
     watch_dirs = [WORK_DIR]
     if script_dir not in watch_dirs:
         watch_dirs.append(script_dir)
-
-    # Record existing files so we can detect new ones (e.g. QR PNG)
-    existing_files: set[str] = set()
-    for d in watch_dirs:
-        try:
-            existing_files.update(os.path.join(d, f) for f in os.listdir(d))
-        except Exception:
-            pass
 
     args = [BBDOWN_BIN, "login"]
     proc = subprocess.Popen(
@@ -166,102 +157,54 @@ def run_bbdown_login(task: dict):
     )
 
     qr_sent = False
-    qr_lock = _threading.Lock()
-    output_all = ""
-    qrcode_lines: list[str] = []
-    in_qr = False
 
     # ------------------------------------------------------------------
-    # helper: send QR to cloud server (idempotent — only first call wins)
+    # helper: find qrcode.png, read + base64, upload, delete
     # ------------------------------------------------------------------
-    def send_qr(qr_text: str = "", image_data: str = "") -> bool:
+    def try_send_qrcode_png() -> bool:
+        """Look for qrcode.png in watch dirs. If found, send it and delete."""
         nonlocal qr_sent
-        with qr_lock:
-            if qr_sent:
-                return False
-        payload: dict = {"qrcode": qr_text or "[QR图片]"}
-        if image_data:
-            payload["image"] = image_data
-        try:
-            requests.post(
-                f"{CLOUD_URL}/api/worker/qrcode/{tid}",
-                json=payload, headers=HEADERS, timeout=10,
-            )
-            with qr_lock:
-                qr_sent = True
-            logger.info(f"二维码已上报 {tid}")
-            return True
-        except Exception as e:
-            logger.warning(f"上报二维码失败: {e}")
-            return False
-
-    # ------------------------------------------------------------------
-    # background: read BBDown stdout (may contain block-char QR or nothing at all)
-    # ------------------------------------------------------------------
-    def read_stdout():
-        nonlocal output_all, qrcode_lines, in_qr
-        try:
-            for line in proc.stdout:
-                output_all += line
-                with qr_lock:
-                    if qr_sent:
-                        continue
-                if any(ch in line for ch in ("█", "▀", "▄", "▌", "▐", "░", "▒", "▓", "■", "□")):
-                    in_qr = True
-                    qrcode_lines.append(line.rstrip())
-                elif in_qr and line.strip():
-                    qrcode_lines.append(line.rstrip())
-                elif in_qr and not line.strip():
-                    if qrcode_lines:
-                        send_qr(qr_text="\n".join(qrcode_lines))
-                        qrcode_lines = []
-                        in_qr = False
-        except Exception:
-            pass
-
-    stdout_thread = _threading.Thread(target=read_stdout, daemon=True)
-    stdout_thread.start()
-
-    # ------------------------------------------------------------------
-    # helper: scan watch dirs for a new QR PNG, send if found
-    # ------------------------------------------------------------------
-    def scan_qr_png() -> bool:
-        """Scan watch dirs for new image files. Returns True if QR was sent."""
         if qr_sent:
             return True
-        try:
-            for d in watch_dirs:
+        for d in watch_dirs:
+            fpath = os.path.join(d, "qrcode.png")
+            if os.path.isfile(fpath):
                 try:
-                    current = set(os.path.join(d, f) for f in os.listdir(d))
-                except Exception:
-                    continue
-                new = current - existing_files
-                for fpath in sorted(new):
-                    fname = os.path.basename(fpath)
-                    if fname.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
-                        # Give BBDown a moment to finish writing
-                        time.sleep(0.3)
-                        with open(fpath, "rb") as f:
-                            b64 = base64.b64encode(f.read()).decode("ascii")
-                        ext = fname.rsplit(".", 1)[-1].lower()
-                        mime = "png" if ext == "png" else "jpeg"
-                        return send_qr(image_data=f"data:image/{mime};base64,{b64}")
-        except Exception as e:
-            logger.warning(f"检测二维码图片异常: {e}")
+                    # Wait a moment to ensure the file is fully written
+                    time.sleep(0.3)
+                    with open(fpath, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode("ascii")
+                    payload = {
+                        "qrcode": "[QR图片]",
+                        "image": f"data:image/png;base64,{b64}",
+                    }
+                    requests.post(
+                        f"{CLOUD_URL}/api/worker/qrcode/{tid}",
+                        json=payload, headers=HEADERS, timeout=10,
+                    )
+                    qr_sent = True
+                    logger.info(f"二维码已上报 {tid}")
+                    # Delete the QR file after upload
+                    os.remove(fpath)
+                    logger.info(f"已删除二维码文件 {fpath}")
+                    return True
+                except Exception as e:
+                    logger.warning(f"处理二维码图片失败: {e}")
+                    return False
         return False
 
-    # Quick initial scan — BBDown may generate the PNG immediately
-    time.sleep(0.5)
-    scan_qr_png()
-
     # ------------------------------------------------------------------
-    # main loop: poll for QR PNG while BBDown waits for scan
+    # wait for qrcode.png to appear, then BBDown to exit
     # ------------------------------------------------------------------
     deadline = time.time() + 120
     try:
+        # Phase 1: wait for QR PNG
+        while not qr_sent and proc.poll() is None and time.time() < deadline:
+            try_send_qrcode_png()
+            time.sleep(1)
+
+        # Phase 2: wait for BBDown to finish (user scanning)
         while proc.poll() is None and time.time() < deadline:
-            if not qr_sent:
-                scan_qr_png()
             time.sleep(1)
 
         if proc.poll() is None:
@@ -273,12 +216,13 @@ def run_bbdown_login(task: dict):
         proc.kill()
         raise
 
-    stdout_thread.join(timeout=5)
-
-    # Flush any remaining text QR
-    with qr_lock:
-        if not qr_sent and qrcode_lines:
-            send_qr(qr_text="\n".join(qrcode_lines))
+    # Capture remaining stdout for error reporting
+    output_all = ""
+    try:
+        remaining, _ = proc.communicate(timeout=5)
+        output_all = remaining or ""
+    except Exception:
+        pass
 
     if proc.returncode == 0 and cookie_available():
         requests.post(f"{CLOUD_URL}/api/worker/login-success/{tid}", headers=HEADERS, timeout=10)
