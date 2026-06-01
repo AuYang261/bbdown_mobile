@@ -1,1 +1,62 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>登录 - BBDown</title></head><body><h1>Login placeholder</h1></body></html>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>登录 - BBDown 下载器</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f0f0f; color: #eee; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+.card { width: 100%; max-width: 360px; background: #1a1a1a; border-radius: 16px; padding: 32px 24px; }
+h1 { text-align: center; font-size: 22px; margin-bottom: 28px; }
+label { display: block; font-size: 14px; color: #aaa; margin-bottom: 6px; }
+input { width: 100%; padding: 12px 14px; font-size: 16px; background: #252525; border: 1px solid #333; border-radius: 10px; color: #eee; margin-bottom: 16px; outline: none; -webkit-appearance: none; }
+input:focus { border-color: #00a1d6; }
+button { width: 100%; padding: 12px; font-size: 17px; background: #00a1d6; color: #fff; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; -webkit-appearance: none; }
+button:active { opacity: 0.8; }
+.error { color: #ff6b6b; font-size: 14px; text-align: center; margin-top: 12px; display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎵 BBDown 下载器</h1>
+  <form id="loginForm">
+    <label for="username">用户名</label>
+    <input id="username" type="text" autocomplete="username" required autofocus>
+    <label for="password">密码</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button type="submit">登录</button>
+    <div class="error" id="error"></div>
+  </form>
+</div>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const u = document.getElementById('username').value.trim();
+  const p = document.getElementById('password').value;
+  const errEl = document.getElementById('error');
+  errEl.style.display = 'none';
+  if (!u || !p) { errEl.textContent = '请输入用户名和密码'; errEl.style.display = 'block'; return; }
+  try {
+    const resp = await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: u, password: p})
+    });
+    const data = await resp.json();
+    if (resp.ok && data.ok) {
+      window.location.href = '/';
+    } else {
+      errEl.textContent = data.error || '登录失败';
+      errEl.style.display = 'block';
+      if (resp.status === 429) {
+        errEl.textContent = '尝试次数过多，请15分钟后再试';
+      }
+    }
+  } catch {
+    errEl.textContent = '网络错误，请重试';
+    errEl.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>
