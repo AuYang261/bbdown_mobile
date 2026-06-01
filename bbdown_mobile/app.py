@@ -85,7 +85,8 @@ def _start_cleanup_thread(app: Flask):
 def main():
     app = create_app()
     # Register blueprints here once they exist - for now just start
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    port = int(os.environ.get("PORT", "5001"))
+    app.run(host="127.0.0.1", port=port, debug=False)
 
 if __name__ == "__main__":
     main()

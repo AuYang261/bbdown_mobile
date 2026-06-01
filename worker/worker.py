@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("worker")
 
-CLOUD_URL = os.environ.get("CLOUD_URL", "http://127.0.0.1:5000")
+CLOUD_URL = os.environ.get("CLOUD_URL", "http://127.0.0.1:5001")
 SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")
 BBDOWN_BIN = os.environ.get("BBDOWN_BIN", "BBDown")
 BBDOWN_COOKIE_FILE = os.environ.get(

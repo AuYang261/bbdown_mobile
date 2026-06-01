@@ -144,4 +144,4 @@ WantedBy=multi-user.target
 - **无法访问**: 检查 nginx 状态 `systemctl status nginx`，证书 `certbot certificates`
 - **Worker连接失败**: 检查 CLOUD_URL 和 SECRET_TOKEN 是否与云服务器一致
 - **下载失败**: 检查内网服务器是否能访问外网，BBDown 版本是否兼容
-- **端口占用**: `lsof -ti:5000 | xargs kill`
+- **端口占用**: `lsof -ti:5001 | xargs kill`

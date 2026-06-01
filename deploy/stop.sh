@@ -50,7 +50,7 @@ stop_port() {
 case "${1:-all}" in
     server)
         stop_pid_file "$SERVER_PID_FILE" "云服务器"
-        stop_port 5000
+        stop_port 5001
         ;;
     worker)
         stop_pid_file "$WORKER_PID_FILE" "Worker"
@@ -59,7 +59,7 @@ case "${1:-all}" in
         echo "🛑 停止所有 BBDown 服务..."
         stop_pid_file "$SERVER_PID_FILE" "云服务器"
         stop_pid_file "$WORKER_PID_FILE" "Worker"
-        stop_port 5000
+        stop_port 5001
         echo "✅ 全部已停止"
         ;;
     *)
