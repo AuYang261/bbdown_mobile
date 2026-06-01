@@ -13,6 +13,7 @@ import uuid as _uuid
 from flask import Blueprint, request, current_app, jsonify
 
 logger = logging.getLogger("bbdown")
+audit = logging.getLogger("bbdown.audit")
 worker_bp = Blueprint("worker", __name__, url_prefix="/api/worker")
 
 # ---- shared event for waking up long-poll requests ----
@@ -160,6 +161,12 @@ def worker_complete(task_id):
                          "filename": filename})
     tq.sse_publish_global("download:complete", {"task_id": task_id})
     logger.info("下载完成 task_id=%s file=%s", task_id, filename)
+
+    task = tq.get(task_id)
+    user = task.get("username", "?") if task else "?"
+    url = task.get("url", "?") if task else "?"
+    audit.info(f"FINISH | user={user} | task={task_id} | mode={task.get('mode', '?') if task else '?'} | url={url} | file={filename}")
+
     return {"ok": True, "file_path": filepath, "filename": filename}
 
 
@@ -181,4 +188,9 @@ def worker_fail(task_id):
     tq.sse_publish_global(fail_event,
                           {"task_id": task_id, "error": error})
     logger.info("任务失败 task_id=%s error=%s", task_id, error)
+
+    user = task.get("username", "?") if task else "?"
+    url = task.get("url", "?") if task else "?"
+    audit.info(f"FAIL   | user={user} | task={task_id} | url={url} | error={error}")
+
     return {"ok": True}

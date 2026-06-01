@@ -36,6 +36,21 @@ def create_app(instance_path: str | None = None) -> Flask:
         stream=sys.stdout,
     )
 
+    # Dedicated download audit log (file only, separate from request logs)
+    audit_path = os.path.join(
+        os.environ.get("DOWNLOAD_LOG_DIR", os.path.join(os.path.dirname(__file__), "downloads")),
+        "download.log",
+    )
+    os.makedirs(os.path.dirname(audit_path), exist_ok=True)
+    _audit_handler = logging.FileHandler(audit_path, encoding="utf-8")
+    _audit_handler.setFormatter(logging.Formatter(
+        "[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    ))
+    _audit_logger = logging.getLogger("bbdown.audit")
+    _audit_logger.addHandler(_audit_handler)
+    _audit_logger.setLevel(logging.INFO)
+    _audit_logger.propagate = False  # don't spill into stdout
+
     # --- Support sub-path reverse proxy (e.g. /bbdown) ---
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)

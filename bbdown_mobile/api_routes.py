@@ -6,6 +6,7 @@ from decorators import login_required, admin_required
 from auth import hash_password, verify_password
 
 logger = logging.getLogger("bbdown")
+audit = logging.getLogger("bbdown.audit")
 api_bp = Blueprint("api", __name__)
 
 # --- Page routes ---
@@ -91,6 +92,8 @@ def api_download():
     tq = current_app.config["task_queue"]
     tid = tq.add_download(url=url, mode=mode, username=session["user"])
 
+    audit.info(f"SUBMIT | user={session['user']} | task={tid} | mode={mode} | url={url}")
+
     from worker_routes import notify_worker
     notify_worker()
 
@@ -155,6 +158,7 @@ def api_file(task_id):
     if not os.path.exists(fpath):
         return {"error": "文件已被清理"}, 404
     logger.info(f"{session['user']} 下载文件 {task_id} {os.path.basename(fpath)}")
+    audit.info(f"SAVE   | user={session['user']} | task={task_id} | file={os.path.basename(fpath)}")
     return send_file(fpath, as_attachment=True, download_name=os.path.basename(fpath))
 
 # --- User management API ---
