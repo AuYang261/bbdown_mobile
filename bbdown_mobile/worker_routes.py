@@ -173,9 +173,12 @@ def worker_fail(task_id):
     tq = current_app.config["task_queue"]
     tq.update(task_id, status="failed", error=error)
 
-    tq.sse_publish_task(task_id, "download:fail",
+    # Publish the right event based on task type
+    task = tq.get(task_id)
+    fail_event = "login:fail" if (task and task.get("type") == "login") else "download:fail"
+    tq.sse_publish_task(task_id, fail_event,
                         {"task_id": task_id, "error": error})
-    tq.sse_publish_global("download:fail",
+    tq.sse_publish_global(fail_event,
                           {"task_id": task_id, "error": error})
     logger.info("任务失败 task_id=%s error=%s", task_id, error)
     return {"ok": True}
