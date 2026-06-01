@@ -44,6 +44,10 @@ def create_app() -> Flask:
     app.config["downloads_dir"] = os.path.join(os.path.dirname(__file__), "downloads")
     os.makedirs(app.config["downloads_dir"], exist_ok=True)
 
+    # --- Register blueprints ---
+    from api_routes import api_bp
+    app.register_blueprint(api_bp)
+
     # --- Cleanup scheduler (daemon thread) ---
     _start_cleanup_thread(app)
 
