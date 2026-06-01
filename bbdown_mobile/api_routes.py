@@ -119,7 +119,8 @@ def api_login_bilibili():
 @login_required
 def api_tasks():
     tq = current_app.config["task_queue"]
-    return jsonify(tq.list_all())
+    tasks = [t for t in tq.list_all() if t.get("type") != "login"]
+    return jsonify(tasks)
 
 @api_bp.route("/api/status", methods=["GET"])
 @login_required
