@@ -16,17 +16,14 @@
 ### 云服务器
 
 ```bash
-cp bbdown_mobile/.env.example bbdown_mobile/.env
-nano bbdown_mobile/.env    # 设置账号密码和密钥
+nano deploy/start-server.sh   # 修改脚本顶部的用户名、密码、密钥
 ./deploy/start-server.sh
 ```
 
 ### 内网 Worker
 
 ```bash
-export CLOUD_URL=https://your-domain.com
-export SECRET_TOKEN=<与云服务器一致>
-export BBDOWN_BIN=/path/to/BBDown   # 从 BBDown GitHub Release 下载
+nano deploy/start-worker.sh   # 修改脚本顶部的域名、密钥
 ./deploy/start-worker.sh
 ```
 
