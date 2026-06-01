@@ -125,7 +125,7 @@ def api_tasks():
 @api_bp.route("/api/status", methods=["GET"])
 @login_required
 def api_status():
-    return {"bilibili_logged_in": current_app.config["bilibili_logged_in"]}
+    return {"logged_in": current_app.config["bilibili_logged_in"]}
 
 @api_bp.route("/api/events")
 @login_required

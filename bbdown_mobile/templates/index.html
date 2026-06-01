@@ -65,7 +65,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
   <div class="btn-row">
     <button class="btn-download" onclick="submitDownload()">开始下载</button>
-    <button class="btn-bili" onclick="biliLogin()">登录B站</button>
+    <button class="btn-bili" id="biliBtn" onclick="biliLogin()">登录B站</button>
   </div>
 </div>
 
@@ -136,12 +136,37 @@ evtSource.addEventListener('login:qrcode', (e) => {
 });
 evtSource.addEventListener('login:success', () => {
   document.getElementById('qrArea').innerHTML = '<p style="color:#4caf50">✅ 登录成功！</p>';
+  updateBiliStatus(true);
   setTimeout(closeQrModal, 1500);
 });
 evtSource.addEventListener('login:fail', (e) => {
   const d = JSON.parse(e.data);
   document.getElementById('qrArea').innerHTML = '<p style="color:#f44336">登录失败: ' + d.error + '</p>';
 });
+evtSource.addEventListener('status:bilibili_update', (e) => {
+  const d = JSON.parse(e.data);
+  updateBiliStatus(d.logged_in);
+});
+
+function updateBiliStatus(loggedIn) {
+  const btn = document.getElementById('biliBtn');
+  if (loggedIn) {
+    btn.textContent = '✅ 已登录B站';
+    btn.style.background = '#4caf50';
+  } else {
+    btn.textContent = '登录B站';
+    btn.style.background = '#fb7299';
+  }
+}
+
+async function loadBiliStatus() {
+  try {
+    const resp = await fetch(SCRIPT_ROOT + '/api/status');
+    const data = await resp.json();
+    updateBiliStatus(data.logged_in);
+  } catch (e) { /* ignore */ }
+}
+loadBiliStatus();
 
 async function loadTasks() {
   const resp = await fetch(SCRIPT_ROOT + '/api/tasks');
