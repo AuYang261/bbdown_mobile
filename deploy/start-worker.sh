@@ -7,8 +7,7 @@ set -e
 # ===== 环境变量（修改这里）=====
 export CLOUD_URL="https://<你的域名>"
 export SECRET_TOKEN="<与云服务器一致>"
-export BBDOWN_BIN="BBDown"
-export WORK_DIR=""             # 留空使用默认路径 ./downloads
+export BBDOWN_BIN="./BBDown"
 # =============================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
