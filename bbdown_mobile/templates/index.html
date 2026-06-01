@@ -125,8 +125,14 @@ evtSource.addEventListener('download:fail', (e) => {
 });
 evtSource.addEventListener('login:qrcode', (e) => {
   const d = JSON.parse(e.data);
-  document.getElementById('qrArea').innerHTML =
-    '<pre>' + d.qrcode + '</pre><p class="hint">截屏后到B站App → 扫一扫 → 选相册 → 扫码</p>';
+  let html = '';
+  if (d.image) {
+    html = '<img src="' + d.image + '" style="max-width:100%;border-radius:8px" alt="QR">' +
+           '<p class="hint">截屏后到B站App → 扫一扫 → 选相册 → 扫码</p>';
+  } else {
+    html = '<pre>' + d.qrcode + '</pre><p class="hint">截屏后到B站App → 扫一扫 → 选相册 → 扫码</p>';
+  }
+  document.getElementById('qrArea').innerHTML = html;
 });
 evtSource.addEventListener('login:success', () => {
   document.getElementById('qrArea').innerHTML = '<p style="color:#4caf50">✅ 登录成功！</p>';

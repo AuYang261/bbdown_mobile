@@ -142,56 +142,118 @@ def run_bbdown_login(task: dict):
     tid = task["id"]
     logger.info(f"开始B站登录流程 {tid}")
 
+    import base64
+    import threading as _threading
+
+    # Record existing files so we can detect new ones (e.g. QR PNG)
+    existing_files = set(os.listdir(WORK_DIR))
+
     args = [BBDOWN_BIN, "login"]
     proc = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
 
+    qr_sent = False
+    qr_lock = _threading.Lock()
+    output_all = ""
     qrcode_lines: list[str] = []
     in_qr = False
-    output_all = ""
 
-    try:
-        for line in proc.stdout:
-            output_all += line
-            if any(ch in line for ch in ("█", "▀", "▄", "▌", "▐", "░", "▒", "▓", "■", "□")):
-                in_qr = True
-                qrcode_lines.append(line.rstrip())
-            elif in_qr and line.strip():
-                qrcode_lines.append(line.rstrip())
-            elif in_qr and not line.strip():
-                if qrcode_lines:
-                    qr_text = "\n".join(qrcode_lines)
-                    try:
-                        requests.post(
-                            f"{CLOUD_URL}/api/worker/qrcode/{tid}",
-                            json={"qrcode": qr_text},
-                            headers=HEADERS, timeout=10,
-                        )
-                    except Exception as e:
-                        logger.warning(f"上报二维码失败: {e}")
-                    qrcode_lines = []
-                    in_qr = False
-
-        proc.wait(timeout=120)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}", json={"error": "登录超时"}, headers=HEADERS)
-        return
-
-    # Send any remaining QR lines
-    if qrcode_lines:
-        qr_text = "\n".join(qrcode_lines)
+    # ------------------------------------------------------------------
+    # helper: send QR to cloud server (idempotent — only first call wins)
+    # ------------------------------------------------------------------
+    def send_qr(qr_text: str = "", image_data: str = ""):
+        nonlocal qr_sent
+        with qr_lock:
+            if qr_sent:
+                return
+            qr_sent = True
+        payload: dict = {"qrcode": qr_text or "[QR图片]"}
+        if image_data:
+            payload["image"] = image_data
         try:
-            requests.post(f"{CLOUD_URL}/api/worker/qrcode/{tid}", json={"qrcode": qr_text}, headers=HEADERS, timeout=10)
+            requests.post(
+                f"{CLOUD_URL}/api/worker/qrcode/{tid}",
+                json=payload, headers=HEADERS, timeout=10,
+            )
+            logger.info(f"二维码已上报 {tid}")
+        except Exception as e:
+            logger.warning(f"上报二维码失败: {e}")
+
+    # ------------------------------------------------------------------
+    # background: read BBDown stdout (may contain block-char QR or nothing at all)
+    # ------------------------------------------------------------------
+    def read_stdout():
+        nonlocal output_all, qrcode_lines, in_qr
+        try:
+            for line in proc.stdout:
+                output_all += line
+                with qr_lock:
+                    if qr_sent:
+                        continue
+                if any(ch in line for ch in ("█", "▀", "▄", "▌", "▐", "░", "▒", "▓", "■", "□")):
+                    in_qr = True
+                    qrcode_lines.append(line.rstrip())
+                elif in_qr and line.strip():
+                    qrcode_lines.append(line.rstrip())
+                elif in_qr and not line.strip():
+                    if qrcode_lines:
+                        send_qr(qr_text="\n".join(qrcode_lines))
+                        qrcode_lines = []
+                        in_qr = False
         except Exception:
             pass
+
+    stdout_thread = _threading.Thread(target=read_stdout, daemon=True)
+    stdout_thread.start()
+
+    # ------------------------------------------------------------------
+    # main loop: poll for new PNG QR file while BBDown waits for scan
+    # ------------------------------------------------------------------
+    deadline = time.time() + 120
+    try:
+        while proc.poll() is None and time.time() < deadline:
+            if not qr_sent:
+                try:
+                    current = set(os.listdir(WORK_DIR))
+                    for fname in sorted(current - existing_files):
+                        if fname.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
+                            fpath = os.path.join(WORK_DIR, fname)
+                            # Give BBDown a moment to finish writing
+                            time.sleep(0.3)
+                            with open(fpath, "rb") as f:
+                                b64 = base64.b64encode(f.read()).decode("ascii")
+                            ext = fname.rsplit(".", 1)[-1].lower()
+                            mime = "png" if ext == "png" else "jpeg"
+                            send_qr(image_data=f"data:image/{mime};base64,{b64}")
+                            break
+                except Exception as e:
+                    logger.warning(f"检测二维码图片异常: {e}")
+            time.sleep(1)
+
+        if proc.poll() is None:
+            proc.kill()
+            requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
+                          json={"error": "登录超时"}, headers=HEADERS)
+            return
+    except Exception:
+        proc.kill()
+        raise
+
+    stdout_thread.join(timeout=5)
+
+    # Flush any remaining text QR
+    with qr_lock:
+        if not qr_sent and qrcode_lines:
+            send_qr(qr_text="\n".join(qrcode_lines))
 
     if proc.returncode == 0 and cookie_available():
         requests.post(f"{CLOUD_URL}/api/worker/login-success/{tid}", headers=HEADERS, timeout=10)
         logger.info("B站登录成功")
     else:
-        requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}", json={"error": f"登录失败: {output_all[-200:]}"}, headers=HEADERS)
+        tail = output_all[-200:] if output_all else "(无输出)"
+        requests.post(f"{CLOUD_URL}/api/worker/fail/{tid}",
+                      json={"error": f"登录失败: {tail}"}, headers=HEADERS)
         logger.error("B站登录失败")
 
 
