@@ -69,11 +69,15 @@ def worker_poll():
     if task:
         return jsonify(task)
 
-    # 3. wait for new work (with timeout)
+    # 3. if the worker was just reporting cookie status, return immediately
+    if cookie_val in ("true", "false"):
+        return {"type": "wait", "retry_after": 5}
+
+    # 4. wait for new work (with timeout)
     _poll_event.clear()
     _poll_event.wait(timeout=60)
 
-    # 4. try again after wakeup
+    # 5. try again after wakeup
     task = tq.pop_pending()
     if task:
         return jsonify(task)
@@ -92,7 +96,8 @@ def worker_progress(task_id):
     tq.update(task_id,
               title=data.get("title"),
               progress=data.get("progress"),
-              speed=data.get("speed"))
+              speed=data.get("speed"),
+              status="downloading")
 
     payload = {"task_id": task_id}
     for k in ("title", "progress", "speed"):

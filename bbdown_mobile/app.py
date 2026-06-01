@@ -7,8 +7,10 @@ from auth import RateLimiter, hash_password
 from users import UserStore
 from tasks import TaskQueue
 
-def create_app() -> Flask:
+def create_app(instance_path: str | None = None) -> Flask:
     app = Flask(__name__)
+    if instance_path:
+        app.instance_path = instance_path
 
     # --- Config ---
     for key in ("ADMIN_USERNAME", "ADMIN_PASSWORD", "APP_SESSION_SECRET", "SECRET_TOKEN"):
