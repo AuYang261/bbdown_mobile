@@ -118,6 +118,7 @@ def worker_qrcode(task_id):
     if data.get("image"):
         payload["image"] = data["image"]
     tq.sse_publish_task(task_id, "login:qrcode", payload)
+    tq.sse_publish_global("login:qrcode", payload)
     return {"ok": True}
 
 
@@ -130,6 +131,7 @@ def worker_login_success(task_id):
     tq = current_app.config["task_queue"]
     tq.update(task_id, status="completed")
     tq.sse_publish_task(task_id, "login:success", {"task_id": task_id})
+    tq.sse_publish_global("login:success", {"task_id": task_id})
     tq.sse_publish_global("status:bilibili_update", {"logged_in": True})
     logger.info("B站登录成功 task_id=%s", task_id)
     return {"ok": True}

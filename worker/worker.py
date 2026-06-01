@@ -174,12 +174,11 @@ def run_bbdown_login(task: dict):
     # ------------------------------------------------------------------
     # helper: send QR to cloud server (idempotent — only first call wins)
     # ------------------------------------------------------------------
-    def send_qr(qr_text: str = "", image_data: str = ""):
+    def send_qr(qr_text: str = "", image_data: str = "") -> bool:
         nonlocal qr_sent
         with qr_lock:
             if qr_sent:
-                return
-            qr_sent = True
+                return False
         payload: dict = {"qrcode": qr_text or "[QR图片]"}
         if image_data:
             payload["image"] = image_data
@@ -188,9 +187,13 @@ def run_bbdown_login(task: dict):
                 f"{CLOUD_URL}/api/worker/qrcode/{tid}",
                 json=payload, headers=HEADERS, timeout=10,
             )
+            with qr_lock:
+                qr_sent = True
             logger.info(f"二维码已上报 {tid}")
+            return True
         except Exception as e:
             logger.warning(f"上报二维码失败: {e}")
+            return False
 
     # ------------------------------------------------------------------
     # background: read BBDown stdout (may contain block-char QR or nothing at all)
@@ -220,34 +223,45 @@ def run_bbdown_login(task: dict):
     stdout_thread.start()
 
     # ------------------------------------------------------------------
-    # main loop: poll for new PNG QR file while BBDown waits for scan
+    # helper: scan watch dirs for a new QR PNG, send if found
+    # ------------------------------------------------------------------
+    def scan_qr_png() -> bool:
+        """Scan watch dirs for new image files. Returns True if QR was sent."""
+        if qr_sent:
+            return True
+        try:
+            for d in watch_dirs:
+                try:
+                    current = set(os.path.join(d, f) for f in os.listdir(d))
+                except Exception:
+                    continue
+                new = current - existing_files
+                for fpath in sorted(new):
+                    fname = os.path.basename(fpath)
+                    if fname.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
+                        # Give BBDown a moment to finish writing
+                        time.sleep(0.3)
+                        with open(fpath, "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode("ascii")
+                        ext = fname.rsplit(".", 1)[-1].lower()
+                        mime = "png" if ext == "png" else "jpeg"
+                        return send_qr(image_data=f"data:image/{mime};base64,{b64}")
+        except Exception as e:
+            logger.warning(f"检测二维码图片异常: {e}")
+        return False
+
+    # Quick initial scan — BBDown may generate the PNG immediately
+    time.sleep(0.5)
+    scan_qr_png()
+
+    # ------------------------------------------------------------------
+    # main loop: poll for QR PNG while BBDown waits for scan
     # ------------------------------------------------------------------
     deadline = time.time() + 120
     try:
         while proc.poll() is None and time.time() < deadline:
             if not qr_sent:
-                try:
-                    for d in watch_dirs:
-                        try:
-                            current = set(os.path.join(d, f) for f in os.listdir(d))
-                        except Exception:
-                            continue
-                        new = current - existing_files
-                        for fpath in sorted(new):
-                            fname = os.path.basename(fpath)
-                            if fname.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
-                                # Give BBDown a moment to finish writing
-                                time.sleep(0.3)
-                                with open(fpath, "rb") as f:
-                                    b64 = base64.b64encode(f.read()).decode("ascii")
-                                ext = fname.rsplit(".", 1)[-1].lower()
-                                mime = "png" if ext == "png" else "jpeg"
-                                send_qr(image_data=f"data:image/{mime};base64,{b64}")
-                                break
-                        if qr_sent:
-                            break
-                except Exception as e:
-                    logger.warning(f"检测二维码图片异常: {e}")
+                scan_qr_png()
             time.sleep(1)
 
         if proc.poll() is None:
