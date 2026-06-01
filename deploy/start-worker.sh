@@ -1,20 +1,26 @@
 #!/bin/bash
 # BBDown Mobile — 内网 Worker 启动脚本
-# 用法: ./start-worker.sh
+# 修改下面的占位符后运行: ./start-worker.sh
 
 set -e
+
+# ===== 环境变量（修改这里）=====
+export CLOUD_URL="https://<你的域名>"
+export SECRET_TOKEN="<与云服务器一致>"
+export BBDOWN_BIN="BBDown"
+export BBDOWN_COOKIE_FILE=""   # 留空使用默认路径 ./bbdown_cookie.txt
+export WORK_DIR=""             # 留空使用默认路径 ./downloads
+# =============================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKER_DIR="$(dirname "$SCRIPT_DIR")/worker"
 PID_FILE="$WORKER_DIR/.worker.pid"
 LOG_FILE="$WORKER_DIR/worker.log"
 
-# 检查 CLOUD_URL 和 SECRET_TOKEN
-if [ -z "$CLOUD_URL" ] || [ -z "$SECRET_TOKEN" ]; then
-    echo "❌ 请先设置环境变量:"
-    echo "   export CLOUD_URL=https://your-domain.com"
-    echo "   export SECRET_TOKEN=<与云服务器一致>"
-    echo "   export BBDOWN_BIN=/path/to/BBDown   # 可选"
+# 检查是否已修改
+if [[ "$CLOUD_URL" == *"<"* ]] || [[ "$SECRET_TOKEN" == *"<"* ]]; then
+    echo "❌ 请先编辑此脚本，修改环境变量占位符"
+    echo "   nano $0"
     exit 1
 fi
 
@@ -29,7 +35,7 @@ cd "$WORKER_DIR"
 
 echo "🚀 启动 BBDown Worker..."
 echo "   云端: $CLOUD_URL"
-echo "   BBDown: ${BBDOWN_BIN:-BBDown}"
+echo "   BBDown: $BBDOWN_BIN"
 
 nohup uv run python worker.py >> "$LOG_FILE" 2>&1 &
 PID=$!
