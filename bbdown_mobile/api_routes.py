@@ -91,6 +91,9 @@ def api_download():
     tq = current_app.config["task_queue"]
     tid = tq.add_download(url=url, mode=mode, username=session["user"])
 
+    from worker_routes import notify_worker
+    notify_worker()
+
     response = {"task_id": tid, "bilibili_available": current_app.config["bilibili_logged_in"]}
     if not current_app.config["bilibili_logged_in"]:
         response["warning"] = "尚未登录B站，高清晰度/大会员视频可能无法下载"
@@ -103,6 +106,10 @@ def api_login_bilibili():
     tid = tq.add_login()
     tq.update(tid, username=session["user"])
     logger.info(f"{session['user']} 提交B站登录")
+
+    from worker_routes import notify_worker
+    notify_worker()
+
     return {"task_id": tid}
 
 @api_bp.route("/api/tasks", methods=["GET"])

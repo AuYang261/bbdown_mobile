@@ -48,6 +48,9 @@ def create_app() -> Flask:
     from api_routes import api_bp
     app.register_blueprint(api_bp)
 
+    from worker_routes import worker_bp
+    app.register_blueprint(worker_bp)
+
     # --- Cleanup scheduler (daemon thread) ---
     _start_cleanup_thread(app)
 
