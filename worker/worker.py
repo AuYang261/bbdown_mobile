@@ -145,12 +145,24 @@ def run_bbdown_login(task: dict):
     import base64
     import threading as _threading
 
+    # BBDown may write QR PNG to WORK_DIR; also watch the script dir as fallback
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    watch_dirs = [WORK_DIR]
+    if script_dir not in watch_dirs:
+        watch_dirs.append(script_dir)
+
     # Record existing files so we can detect new ones (e.g. QR PNG)
-    existing_files = set(os.listdir(WORK_DIR))
+    existing_files: set[str] = set()
+    for d in watch_dirs:
+        try:
+            existing_files.update(os.path.join(d, f) for f in os.listdir(d))
+        except Exception:
+            pass
 
     args = [BBDOWN_BIN, "login"]
     proc = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        cwd=WORK_DIR,
     )
 
     qr_sent = False
@@ -215,17 +227,24 @@ def run_bbdown_login(task: dict):
         while proc.poll() is None and time.time() < deadline:
             if not qr_sent:
                 try:
-                    current = set(os.listdir(WORK_DIR))
-                    for fname in sorted(current - existing_files):
-                        if fname.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
-                            fpath = os.path.join(WORK_DIR, fname)
-                            # Give BBDown a moment to finish writing
-                            time.sleep(0.3)
-                            with open(fpath, "rb") as f:
-                                b64 = base64.b64encode(f.read()).decode("ascii")
-                            ext = fname.rsplit(".", 1)[-1].lower()
-                            mime = "png" if ext == "png" else "jpeg"
-                            send_qr(image_data=f"data:image/{mime};base64,{b64}")
+                    for d in watch_dirs:
+                        try:
+                            current = set(os.path.join(d, f) for f in os.listdir(d))
+                        except Exception:
+                            continue
+                        new = current - existing_files
+                        for fpath in sorted(new):
+                            fname = os.path.basename(fpath)
+                            if fname.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
+                                # Give BBDown a moment to finish writing
+                                time.sleep(0.3)
+                                with open(fpath, "rb") as f:
+                                    b64 = base64.b64encode(f.read()).decode("ascii")
+                                ext = fname.rsplit(".", 1)[-1].lower()
+                                mime = "png" if ext == "png" else "jpeg"
+                                send_qr(image_data=f"data:image/{mime};base64,{b64}")
+                                break
+                        if qr_sent:
                             break
                 except Exception as e:
                     logger.warning(f"检测二维码图片异常: {e}")
