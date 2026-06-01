@@ -1,1 +1,266 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BBDown 下载器</title></head><body><h1>Main page placeholder</h1></body></html>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BBDown 下载器</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f0f0f; color: #eee; padding-bottom: 40px; }
+.header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: #1a1a1a; position: sticky; top: 0; z-index: 10; }
+.header h1 { font-size: 18px; }
+.header-btns { display: flex; gap: 8px; }
+.header-btns button { padding: 8px 14px; font-size: 14px; background: #333; color: #eee; border: none; border-radius: 8px; cursor: pointer; }
+.form-area { padding: 16px 18px; }
+.form-area input[type="text"] { width: 100%; padding: 12px 14px; font-size: 16px; background: #1a1a1a; border: 1px solid #333; border-radius: 10px; color: #eee; margin-bottom: 12px; outline: none; -webkit-appearance: none; }
+.form-area input[type="text"]:focus { border-color: #00a1d6; }
+.mode-row { display: flex; gap: 16px; margin-bottom: 12px; align-items: center; font-size: 15px; }
+.mode-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row button { flex: 1; padding: 12px; font-size: 16px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; -webkit-appearance: none; }
+.btn-download { background: #00a1d6; color: #fff; }
+.btn-bili { background: #fb7299; color: #fff; }
+.btn-download:active, .btn-bili:active { opacity: 0.8; }
+.section-title { padding: 8px 18px; font-size: 14px; color: #888; }
+.task-card { margin: 0 18px 10px; padding: 14px; background: #1a1a1a; border-radius: 12px; }
+.task-title { font-size: 15px; margin-bottom: 6px; word-break: break-all; }
+.task-info { font-size: 13px; color: #888; }
+.progress-bar { height: 4px; background: #333; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.progress-fill { height: 100%; background: #00a1d6; border-radius: 2px; transition: width 0.3s; }
+.task-completed .progress-fill { background: #4caf50; }
+.task-failed .progress-fill { background: #f44336; }
+.btn-save { display: inline-block; margin-top: 8px; padding: 8px 16px; background: #4caf50; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; text-decoration: none; }
+.task-error { color: #f44336; font-size: 13px; margin-top: 4px; }
+.warning-toast { position: fixed; top: 60px; left: 18px; right: 18px; padding: 12px 16px; background: #ff9800; color: #000; border-radius: 10px; font-size: 14px; z-index: 20; display: none; }
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 30; justify-content: center; align-items: flex-start; padding: 60px 20px 20px; }
+.modal-overlay.active { display: flex; }
+.modal { width: 100%; max-width: 360px; background: #1a1a1a; border-radius: 16px; padding: 24px; }
+.modal h2 { font-size: 18px; margin-bottom: 16px; }
+.modal input { width: 100%; padding: 10px 12px; font-size: 15px; background: #252525; border: 1px solid #333; border-radius: 8px; color: #eee; margin-bottom: 10px; outline: none; -webkit-appearance: none; }
+.modal button { padding: 10px 20px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; -webkit-appearance: none; }
+.modal .btn-primary { background: #00a1d6; color: #fff; }
+.modal .btn-danger { background: #f44336; color: #fff; }
+.modal .btn-close { background: #444; color: #eee; }
+.modal .user-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #333; }
+.modal .user-actions { display: flex; gap: 6px; }
+.qrcode-area { text-align: center; padding: 16px; }
+.qrcode-area pre { background: #fff; color: #000; display: inline-block; padding: 8px; font-size: 10px; line-height: 1.0; border-radius: 8px; overflow-x: auto; max-width: 100%; white-space: pre; }
+.qrcode-area .hint { color: #888; font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🎵 BBDown 下载器</h1>
+  <div class="header-btns">
+    {% if is_admin %}<button onclick="openUserModal()">管理</button>{% endif %}
+    <button onclick="logout()">登出</button>
+  </div>
+</div>
+
+<div class="form-area">
+  <input type="text" id="urlInput" placeholder="粘贴B站链接（BV号或完整URL）..." autofocus>
+  <div class="mode-row">
+    <label><input type="radio" name="mode" value="video" checked> 视频+音频</label>
+    <label><input type="radio" name="mode" value="audio"> 仅音频</label>
+  </div>
+  <div class="btn-row">
+    <button class="btn-download" onclick="submitDownload()">开始下载</button>
+    <button class="btn-bili" onclick="biliLogin()">登录B站</button>
+  </div>
+</div>
+
+<div id="warningToast" class="warning-toast"></div>
+<div class="section-title">下载列表</div>
+<div id="taskList"></div>
+
+<!-- User management modal -->
+<div class="modal-overlay" id="userModal">
+  <div class="modal">
+    <h2>用户管理</h2>
+    <div id="userList"></div>
+    <div style="margin-top:16px">
+      <input type="text" id="newUsername" placeholder="新用户名">
+      <input type="password" id="newPassword" placeholder="密码">
+      <button class="btn-primary" onclick="addUser()">添加</button>
+    </div>
+    <div style="margin-top:12px;text-align:right">
+      <button class="btn-close" onclick="closeUserModal()">关闭</button>
+    </div>
+    <div id="userError" style="color:#f44336;font-size:13px;margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- QR login modal -->
+<div class="modal-overlay" id="qrModal">
+  <div class="modal">
+    <h2>登录B站</h2>
+    <div class="qrcode-area" id="qrArea">
+      <p style="color:#888">正在生成二维码...</p>
+    </div>
+    <div style="text-align:right;margin-top:12px">
+      <button class="btn-close" onclick="closeQrModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const evtSource = new EventSource('/api/events');
+const tasks = {};
+
+evtSource.addEventListener('download:progress', (e) => {
+  const d = JSON.parse(e.data);
+  tasks[d.task_id] = Object.assign(tasks[d.task_id] || {}, d, {status: 'downloading'});
+  renderTasks();
+});
+evtSource.addEventListener('download:complete', (e) => {
+  const d = JSON.parse(e.data);
+  tasks[d.task_id] = Object.assign(tasks[d.task_id] || {}, d, {status: 'completed', progress: 1.0});
+  renderTasks();
+});
+evtSource.addEventListener('download:fail', (e) => {
+  const d = JSON.parse(e.data);
+  tasks[d.task_id] = Object.assign(tasks[d.task_id] || {}, d, {status: 'failed'});
+  renderTasks();
+});
+evtSource.addEventListener('login:qrcode', (e) => {
+  const d = JSON.parse(e.data);
+  document.getElementById('qrArea').innerHTML =
+    '<pre>' + d.qrcode + '</pre><p class="hint">截屏后到B站App → 扫一扫 → 选相册 → 扫码</p>';
+});
+evtSource.addEventListener('login:success', () => {
+  document.getElementById('qrArea').innerHTML = '<p style="color:#4caf50">✅ 登录成功！</p>';
+  setTimeout(closeQrModal, 1500);
+});
+evtSource.addEventListener('login:fail', (e) => {
+  const d = JSON.parse(e.data);
+  document.getElementById('qrArea').innerHTML = '<p style="color:#f44336">登录失败: ' + d.error + '</p>';
+});
+
+async function loadTasks() {
+  const resp = await fetch('/api/tasks');
+  const data = await resp.json();
+  data.forEach(t => { tasks[t.id] = t; });
+  renderTasks();
+}
+loadTasks();
+
+async function submitDownload() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return;
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  const resp = await fetch('/api/download', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url, mode})
+  });
+  const data = await resp.json();
+  if (data.warning) {
+    const toast = document.getElementById('warningToast');
+    toast.textContent = data.warning;
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 5000);
+  }
+  if (data.task_id) {
+    tasks[data.task_id] = {id: data.task_id, url, mode, status: 'pending', title: url, progress: 0};
+    document.getElementById('urlInput').value = '';
+    renderTasks();
+  }
+}
+
+async function biliLogin() {
+  document.getElementById('qrModal').classList.add('active');
+  document.getElementById('qrArea').innerHTML = '<p style="color:#888">正在生成二维码...</p>';
+  await fetch('/api/login-bilibili', {method: 'POST'});
+}
+function closeQrModal() {
+  document.getElementById('qrModal').classList.remove('active');
+}
+
+function renderTasks() {
+  const container = document.getElementById('taskList');
+  const list = Object.values(tasks).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  container.innerHTML = list.map(t => {
+    const pct = Math.round((t.progress || 0) * 100);
+    let extra = '';
+    let cssClass = '';
+    if (t.status === 'downloading') {
+      extra = '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
+              '<div class="task-info">' + pct + '% · ' + (t.speed || '') + '</div>';
+    } else if (t.status === 'completed') {
+      extra = '<a class="btn-save" href="/api/file/' + t.id + '">💾 保存文件</a>';
+      cssClass = ' task-completed';
+    } else if (t.status === 'failed') {
+      extra = '<div class="task-error">❌ ' + (t.error || '下载失败') + '</div>';
+      cssClass = ' task-failed';
+    } else {
+      extra = '<div class="task-info">⏳ 等待中...</div>';
+    }
+    return '<div class="task-card' + cssClass + '"><div class="task-title">' +
+           (t.title || t.url || '(无标题)') + '</div>' + extra + '</div>';
+  }).join('');
+}
+
+async function openUserModal() {
+  document.getElementById('userModal').classList.add('active');
+  await loadUserList();
+}
+function closeUserModal() { document.getElementById('userModal').classList.remove('active'); }
+
+async function loadUserList() {
+  const resp = await fetch('/api/users');
+  const users = await resp.json();
+  document.getElementById('userList').innerHTML = users.map(u =>
+    '<div class="user-row"><span>' + u + '</span>' +
+    '<div class="user-actions">' +
+    '<button class="btn-primary" onclick="changePwdPrompt(\'' + u + '\')">改密</button>' +
+    '<button class="btn-danger" onclick="removeUser(\'' + u + '\')">删除</button>' +
+    '</div></div>'
+  ).join('');
+}
+
+async function addUser() {
+  const u = document.getElementById('newUsername').value.trim();
+  const p = document.getElementById('newPassword').value;
+  if (!u || !p) return;
+  const resp = await fetch('/api/users/add', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username: u, password: p})
+  });
+  const data = await resp.json();
+  if (data.ok) {
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newPassword').value = '';
+    loadUserList();
+  } else {
+    document.getElementById('userError').textContent = data.error;
+  }
+}
+
+async function removeUser(username) {
+  if (!confirm('确认删除用户 ' + username + '？')) return;
+  const resp = await fetch('/api/users/remove', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username})
+  });
+  const data = await resp.json();
+  if (data.ok) loadUserList();
+  else alert(data.error);
+}
+
+async function changePwdPrompt(username) {
+  const newPw = prompt('输入 ' + username + ' 的新密码（管理员可强制重置）');
+  if (!newPw) return;
+  const resp = await fetch('/api/users/change-password', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username, old_password: '', new_password: newPw})
+  });
+  const data = await resp.json();
+  alert(data.ok ? '密码已更新' : data.error);
+}
+
+async function logout() {
+  await fetch('/api/logout', {method: 'POST'});
+  window.location.href = '/login';
+}
+</script>
+</body>
+</html>
