@@ -6,5 +6,8 @@ dependencies = [
     "flask>=3.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
 [project.scripts]
 bbdown-server = "app:main"
