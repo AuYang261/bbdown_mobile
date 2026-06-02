@@ -115,11 +115,14 @@ def worker_qrcode(task_id):
     data = request.get_json() or {}
     tq = current_app.config["task_queue"]
     tq.update(task_id, qrcode=data.get("qrcode"))
+    has_image = bool(data.get("image"))
     payload = {"task_id": task_id, "qrcode": data.get("qrcode")}
-    if data.get("image"):
+    if has_image:
         payload["image"] = data["image"]
     tq.sse_publish_task(task_id, "login:qrcode", payload)
     tq.sse_publish_global("login:qrcode", payload)
+    logger.info(f"QR SSE published task_id={task_id} has_image={has_image} "
+                f"global_listeners={len(tq._global_listeners)}")
     return {"ok": True}
 
 

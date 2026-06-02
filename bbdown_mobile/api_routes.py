@@ -160,22 +160,25 @@ def api_events():
     def generate():
         sub = tq.sse_subscribe_global()
         current_user = session["user"]
+        logger.info(f"SSE client connected user={current_user}")
         try:
             while True:
                 msg = sub.wait(timeout=15)
                 if msg:
                     # Filter: only forward events belonging to current user.
-                    # Default to current_user so events are never dropped
-                    # when a task exists but has no username set yet.
                     tid = msg["data"].get("task_id")
                     if tid:
                         task = tq.get(tid)
-                        if task and task.get("username", current_user) != current_user:
-                            continue
+                        task_user = task.get("username") if task else None
+                        if task_user and task_user != current_user:
+                            continue  # skip other users' events
                     yield f"event: {msg['event']}\ndata: {_json.dumps(msg['data'])}\n\n"
                 else:
                     yield ": heartbeat\n\n"
         except GeneratorExit:
+            sub.close()
+        except Exception:
+            logger.exception(f"SSE error for user={current_user}")
             sub.close()
 
     return Response(generate(), mimetype="text/event-stream",

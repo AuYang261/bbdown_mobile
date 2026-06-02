@@ -180,6 +180,14 @@ const evtSource = new EventSource(SCRIPT_ROOT + '/api/events');
 const tasks = {};
 let bilibiliLoggedIn = false;
 
+// SSE connection health
+let sseOk = true;
+evtSource.onopen = () => { sseOk = true; };
+evtSource.onerror = () => {
+  sseOk = false;
+  // EventSource auto-reconnects after ~3s, onopen will fire when back
+};
+
 // HTML escape helper
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
