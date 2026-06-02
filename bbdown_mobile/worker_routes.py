@@ -11,7 +11,6 @@ import time as _time
 import uuid as _uuid
 
 from flask import Blueprint, request, current_app, jsonify
-from werkzeug.utils import secure_filename
 
 logger = logging.getLogger("bbdown")
 audit = logging.getLogger("bbdown.audit")
@@ -157,7 +156,8 @@ def worker_complete(task_id):
     downloads_dir = current_app.config["downloads_dir"]
 
     prefix = _uuid.uuid4().hex[:12]
-    orig_name = secure_filename(f.filename or "download")
+    # Basename strips path separators (prevent traversal); keep Unicode for Chinese filenames
+    orig_name = os.path.basename(f.filename or "download").replace("\x00", "")
     filename = f"{prefix}_{orig_name}"
     filepath = os.path.join(downloads_dir, filename)
     f.save(filepath)
