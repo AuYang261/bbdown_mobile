@@ -77,6 +77,13 @@ def create_app(instance_path: str | None = None) -> Flask:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "script-src 'self' 'unsafe-inline'"
+        )
         return response
 
     # --- Register blueprints ---
