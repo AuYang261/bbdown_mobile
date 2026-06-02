@@ -103,6 +103,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <h1>🎵 BBDown</h1>
   <div class="header-btns">
     {% if is_admin %}<button onclick="openUserModal()">管理</button>{% endif %}
+    <button onclick="changeOwnPwd()">改密</button>
     <button onclick="logout()">登出</button>
   </div>
 </div>
@@ -409,6 +410,18 @@ async function removeUser(username) {
     if (data.ok) loadUserList();
     else alert(data.error);
   });
+}
+async function changeOwnPwd() {
+  const oldPw = prompt('请输入旧密码');
+  if (!oldPw) return;
+  const newPw = prompt('请输入新密码');
+  if (!newPw) return;
+  const resp = await fetch(SCRIPT_ROOT + '/api/users/change-password', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username: CURRENT_USER, old_password: oldPw, new_password: newPw})
+  });
+  const data = await resp.json();
+  alert(data.ok ? '密码已更新' : data.error);
 }
 async function changePwdPrompt(username) {
   const newPw = prompt('输入「' + username + '」的新密码（管理员可强制重置）');
