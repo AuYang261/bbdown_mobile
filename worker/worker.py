@@ -24,7 +24,7 @@ WORK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads")
 
 # Path to the admin/template BBDown binary — copied into each user's directory
 script_dir = os.path.dirname(os.path.abspath(__file__))
-BBDOWN_SOURCE = os.environ.get("BBDOWN_SOURCE", os.path.join(script_dir, "bbdown", "BBDown"))
+BBDOWN_SOURCE = os.environ.get("BBDOWN_SOURCE", os.path.join(script_dir, "BBDown"))
 
 os.makedirs(WORK_DIR, exist_ok=True)
 
@@ -47,7 +47,7 @@ def ensure_user_bbdown(username: str) -> str:
     if not os.path.exists(dest):
         if not os.path.exists(BBDOWN_SOURCE):
             raise FileNotFoundError(
-                f"BBDown source binary not found: {BBDOWN_SOURCE}. "
+                f"BBDown source binary not found: {BBDOWN_SOURCE} related to ({os.getcwd()}). "
                 f"Place the BBDown binary there or set BBDOWN_SOURCE env var."
             )
         shutil.copy2(BBDOWN_SOURCE, dest)
