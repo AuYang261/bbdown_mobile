@@ -156,29 +156,27 @@ def api_status():
 def api_events():
     """SSE endpoint — streams task progress and global events to the client."""
     tq = current_app.config["task_queue"]
+    # Capture before entering generator — session proxy must be read
+    # in the route handler where the request context is guaranteed alive.
+    current_user = session["user"]
+    logger.info(f"SSE client connected user={current_user}")
 
     def generate():
         sub = tq.sse_subscribe_global()
-        current_user = session["user"]
-        logger.info(f"SSE client connected user={current_user}")
         try:
             while True:
                 msg = sub.wait(timeout=15)
                 if msg:
-                    # Filter: only forward events belonging to current user.
+                    # Only forward events belonging to current user
                     tid = msg["data"].get("task_id")
                     if tid:
                         task = tq.get(tid)
-                        task_user = task.get("username") if task else None
-                        if task_user and task_user != current_user:
-                            continue  # skip other users' events
+                        if task and task.get("username", "") and task.get("username") != current_user:
+                            continue
                     yield f"event: {msg['event']}\ndata: {_json.dumps(msg['data'])}\n\n"
                 else:
                     yield ": heartbeat\n\n"
         except GeneratorExit:
-            sub.close()
-        except Exception:
-            logger.exception(f"SSE error for user={current_user}")
             sub.close()
 
     return Response(generate(), mimetype="text/event-stream",
