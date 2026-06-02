@@ -103,7 +103,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <h1>🎵 BBDown</h1>
   <div class="header-btns">
     {% if is_admin %}<button onclick="openUserModal()">管理</button>{% endif %}
-    <button onclick="changeOwnPwd()">改密</button>
+    {% if not is_admin %}<button onclick="changeOwnPwd()">改密</button>{% endif %}
     <button onclick="logout()">登出</button>
   </div>
 </div>
