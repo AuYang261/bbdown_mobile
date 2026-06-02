@@ -16,14 +16,14 @@
 ### 云服务器
 
 ```bash
-nano deploy/start-server.sh   # 修改脚本顶部的用户名、密码、密钥
+vim deploy/start-server.sh   # 修改脚本顶部的用户名、密码、密钥
 ./deploy/start-server.sh
 ```
 
 ### 内网 Worker
 
 ```bash
-nano deploy/start-worker.sh   # 修改脚本顶部的域名、密钥
+vim deploy/start-worker.sh   # 修改脚本顶部的域名、密钥
 ./deploy/start-worker.sh
 ```
 

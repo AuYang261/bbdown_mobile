@@ -17,15 +17,17 @@ cd bbdown_mobile/bbdown_mobile
 uv sync
 ```
 
-### 2. 配置环境变量
+### 2. 配置
 ```bash
-cp .env.example .env
-nano .env
-# 必须设置:
-#   ADMIN_USERNAME=your-admin-name
-#   ADMIN_PASSWORD=your-strong-password
-#   APP_SESSION_SECRET=random-string-at-least-32-chars
-#   SECRET_TOKEN=shared-secret-with-worker
+cd /opt/bbdown_mobile/bbdown_mobile
+uv sync
+
+# 修改start-worker.sh
+export ADMIN_USERNAME="<管理员用户名>"
+export ADMIN_PASSWORD="<管理员密码>"
+export APP_SESSION_SECRET="<随机字符串，至少32字符>"
+export SECRET_TOKEN="<与 Worker 约定的一致>"
+export PORT="5001"
 ```
 
 ### 3. Nginx + HTTPS
@@ -41,7 +43,12 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### 4. 启动
-推荐 systemd:
+
+```bash
+./start-server.sh
+```
+
+或通过 systemd:
 ```ini
 # /etc/systemd/system/bbdown.service
 [Unit]
@@ -78,26 +85,25 @@ sudo systemctl enable --now bbdown
 cd /opt/bbdown_mobile/worker
 uv sync
 
-# 设置环境变量
+# 修改start-worker.sh
 export CLOUD_URL=https://your-domain.com
 export SECRET_TOKEN=<same-as-cloud-server>
-export BBDOWN_SOURCE=/path/to/BBDown   # 管理员模板 BBDown 二进制
+export BBDOWN_SOURCE=./BBDown   # BBDown 二进制(相对于worker/目录)
 ```
 
 ### 3. 提前放好 BBDown 模板
 ```bash
-# 把 BBDown 可执行文件放到 worker/bbdown/ 目录
-mkdir -p worker/bbdown
-cp /path/to/BBDown worker/bbdown/BBDown
-chmod +x worker/bbdown/BBDown
+# 把 BBDown 可执行文件放到 worker/ 目录
+cp /path/to/BBDown worker/
+chmod +x worker/BBDown
 ```
 
 ### 4. 启动 Worker
 ```bash
-uv run python worker.py
+./start-worker.sh
 ```
 
-推荐 systemd:
+或通过 systemd:
 ```ini
 [Unit]
 Description=BBDown Worker
@@ -109,7 +115,7 @@ User=root
 WorkingDirectory=/opt/bbdown_mobile/worker
 Environment="CLOUD_URL=https://your-domain.com"
 Environment="SECRET_TOKEN=<token>"
-Environment="BBDOWN_SOURCE=/opt/bbdown_mobile/worker/bbdown/BBDown"
+Environment="BBDOWN_SOURCE=/opt/bbdown_mobile/worker/BBDown"
 ExecStart=/root/.cargo/bin/uv run python worker.py
 Restart=always
 
@@ -134,8 +140,8 @@ WantedBy=multi-user.target
 |---|---|---|
 | CLOUD_URL | 是 | 云服务器地址 (含https://) |
 | SECRET_TOKEN | 是 | 与云服务器一致 |
-| BBDOWN_SOURCE | 否 | BBDown模板二进制 (默认 worker/bbdown/BBDown)，worker会按用户复制 |
-| WORK_DIR | 否 | 下载工作目录 (默认 worker/downloads) |
+| BBDOWN_SOURCE | 否 | BBDown模板二进制 (默认 worker/BBDown)，worker会按用户复制 |
+
 
 ---
 

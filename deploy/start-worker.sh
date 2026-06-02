@@ -7,7 +7,7 @@ set -e
 # ===== 环境变量（修改这里）=====
 export CLOUD_URL="https://<你的域名>"
 export SECRET_TOKEN="<与云服务器一致>"
-export BBDOWN_SOURCE="./BBDown"  # BBDown 二进制(当前目录为worker/) — worker 会按用户复制
+export BBDOWN_SOURCE="./BBDown"  # BBDown 二进制(相对于worker/目录) — worker 会按用户复制
 # =============================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
