@@ -65,13 +65,14 @@ def worker_poll():
 
     tq = current_app.config["task_queue"]  # re-fetch in case another thread mutated
 
-    # 2. try to pop immediately
+    # 2. clear event BEFORE checking — prevents race where notify_worker()
+    #    fires between pop_pending() and clear(), which would drop the wakeup
+    _poll_event.clear()
     task = tq.pop_pending()
     if task:
         return jsonify(task)
 
     # 3. wait for new work (with timeout)
-    _poll_event.clear()
     _poll_event.wait(timeout=60)
 
     # 4. try again after wakeup

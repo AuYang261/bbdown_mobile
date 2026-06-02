@@ -164,11 +164,13 @@ def api_events():
             while True:
                 msg = sub.wait(timeout=15)
                 if msg:
-                    # Filter: only forward events belonging to current user
+                    # Filter: only forward events belonging to current user.
+                    # Default to current_user so events are never dropped
+                    # when a task exists but has no username set yet.
                     tid = msg["data"].get("task_id")
                     if tid:
                         task = tq.get(tid)
-                        if task and task.get("username") != current_user:
+                        if task and task.get("username", current_user) != current_user:
                             continue
                     yield f"event: {msg['event']}\ndata: {_json.dumps(msg['data'])}\n\n"
                 else:
