@@ -61,7 +61,7 @@ def create_app(instance_path: str | None = None) -> Flask:
     app.config["user_store"] = UserStore(users_path)
     app.config["task_queue"] = TaskQueue()
     app.config["rate_limiter"] = RateLimiter()
-    app.config["bilibili_logged_in"] = False
+    app.config["bilibili_logged_in"] = set()  # set of usernames with valid BBDown.data
     app.config["downloads_dir"] = os.path.join(os.path.dirname(__file__), "downloads")
     os.makedirs(app.config["downloads_dir"], exist_ok=True)
 

@@ -7,7 +7,7 @@ set -e
 # ===== 环境变量（修改这里）=====
 export CLOUD_URL="https://<你的域名>"
 export SECRET_TOKEN="<与云服务器一致>"
-export BBDOWN_BIN="./BBDown"
+export BBDOWN_SOURCE="./BBDown"  # 管理员模板 BBDown 二进制 — worker 会按用户复制
 # =============================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -33,7 +33,7 @@ cd "$WORKER_DIR"
 
 echo "🚀 启动 BBDown Worker..."
 echo "   云端: $CLOUD_URL"
-echo "   BBDown: $BBDOWN_BIN"
+echo "   BBDown 模板: $BBDOWN_SOURCE"
 
 nohup uv run python worker.py >> "$LOG_FILE" 2>&1 &
 PID=$!

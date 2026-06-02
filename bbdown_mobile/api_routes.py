@@ -97,8 +97,9 @@ def api_download():
     from worker_routes import notify_worker
     notify_worker()
 
-    response = {"task_id": tid, "bilibili_available": current_app.config["bilibili_logged_in"]}
-    if not current_app.config["bilibili_logged_in"]:
+    logged_in = session["user"] in current_app.config.get("bilibili_logged_in", set())
+    response = {"task_id": tid, "bilibili_available": logged_in}
+    if not logged_in:
         response["warning"] = "尚未登录B站，高清晰度/大会员视频可能无法下载"
     return response
 
@@ -124,9 +125,10 @@ def api_bilibili_logout():
     tq.update(tid, username=session["user"])
     logger.info(f"{session['user']} 退出B站登录")
 
-    # Immediately mark as not logged in for responsive UI
-    current_app.config["bilibili_logged_in"] = False
-    tq.sse_publish_global("status:bilibili_update", {"logged_in": False})
+    # Immediately remove current user from set for responsive UI
+    current_app.config["bilibili_logged_in"].discard(session["user"])
+    tq.sse_publish_global("status:bilibili_update",
+                          {"users": list(current_app.config["bilibili_logged_in"])})
 
     from worker_routes import notify_worker
     notify_worker()
@@ -143,7 +145,9 @@ def api_tasks():
 @api_bp.route("/api/status", methods=["GET"])
 @login_required
 def api_status():
-    return {"bilibili_logged_in": current_app.config["bilibili_logged_in"]}
+    username = session["user"]
+    logged_in = username in current_app.config.get("bilibili_logged_in", set())
+    return {"bilibili_logged_in": logged_in}
 
 @api_bp.route("/api/events")
 @login_required

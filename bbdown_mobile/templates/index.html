@@ -174,6 +174,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <script>
 const SCRIPT_ROOT = "{{ request.script_root }}";
+const CURRENT_USER = "{{ session['user'] }}";
 const evtSource = new EventSource(SCRIPT_ROOT + '/api/events');
 const tasks = {};
 let bilibiliLoggedIn = false;
@@ -194,7 +195,7 @@ let bilibiliLoggedIn = false;
 // ===== B站登录状态 =====
 evtSource.addEventListener('status:bilibili_update', (e) => {
   const d = JSON.parse(e.data);
-  bilibiliLoggedIn = d.logged_in;
+  bilibiliLoggedIn = d.users && d.users.includes(CURRENT_USER);
   updateBiliUI();
 });
 

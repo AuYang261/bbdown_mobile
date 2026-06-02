@@ -81,14 +81,15 @@ uv sync
 # 设置环境变量
 export CLOUD_URL=https://your-domain.com
 export SECRET_TOKEN=<same-as-cloud-server>
-export BBDOWN_BIN=/path/to/BBDown
+export BBDOWN_SOURCE=/path/to/BBDown   # 管理员模板 BBDown 二进制
 ```
 
-### 3. 首次登录B站
+### 3. 提前放好 BBDown 模板
 ```bash
-/path/to/BBDown login
-# 扫码后在当前目录生成 cookie 文件
-# 或通过网页触发登录 (推荐)
+# 把 BBDown 可执行文件放到 worker/bbdown/ 目录
+mkdir -p worker/bbdown
+cp /path/to/BBDown worker/bbdown/BBDown
+chmod +x worker/bbdown/BBDown
 ```
 
 ### 4. 启动 Worker
@@ -108,7 +109,7 @@ User=root
 WorkingDirectory=/opt/bbdown_mobile/worker
 Environment="CLOUD_URL=https://your-domain.com"
 Environment="SECRET_TOKEN=<token>"
-Environment="BBDOWN_BIN=/opt/bbdown/BBDown"
+Environment="BBDOWN_SOURCE=/opt/bbdown_mobile/worker/bbdown/BBDown"
 ExecStart=/root/.cargo/bin/uv run python worker.py
 Restart=always
 
@@ -133,9 +134,8 @@ WantedBy=multi-user.target
 |---|---|---|
 | CLOUD_URL | 是 | 云服务器地址 (含https://) |
 | SECRET_TOKEN | 是 | 与云服务器一致 |
-| BBDOWN_BIN | 否 | BBDown二进制路径 (默认BBDown) |
-| BBDOWN_COOKIE_FILE | 否 | Cookie文件路径 |
-| WORK_DIR | 否 | 下载工作目录 |
+| BBDOWN_SOURCE | 否 | BBDown模板二进制 (默认 worker/bbdown/BBDown)，worker会按用户复制 |
+| WORK_DIR | 否 | 下载工作目录 (默认 worker/downloads) |
 
 ---
 

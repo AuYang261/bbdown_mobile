@@ -2,7 +2,7 @@
 
 import os
 import sys
-import json
+import shutil
 import time
 import subprocess
 import re
@@ -20,37 +20,87 @@ logger = logging.getLogger("worker")
 
 CLOUD_URL = os.environ.get("CLOUD_URL", "http://127.0.0.1:5001")
 SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")
-BBDOWN_BIN = os.environ.get("BBDOWN_BIN", "BBDown")
 WORK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads")
+
+# Path to the admin/template BBDown binary — copied into each user's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+BBDOWN_SOURCE = os.environ.get("BBDOWN_SOURCE", os.path.join(script_dir, "bbdown", "BBDown"))
 
 os.makedirs(WORK_DIR, exist_ok=True)
 
 HEADERS = {"Authorization": f"Bearer {SECRET_TOKEN}"}
 
-# BBDown login saves session to BBDown.data; BBDown reads it automatically from cwd / --work-dir
-BBDOWN_DATA_FILE = os.path.join(WORK_DIR, "BBDown.data")
+
+def user_dir(username: str) -> str:
+    """Return per-user directory, creating it if needed."""
+    d = os.path.join(WORK_DIR, username)
+    os.makedirs(d, exist_ok=True)
+    return d
 
 
-def cookie_available() -> bool:
-    return os.path.exists(BBDOWN_DATA_FILE) and os.path.getsize(BBDOWN_DATA_FILE) > 0
+def ensure_user_bbdown(username: str) -> str:
+    """Copy the BBDown binary into *username*'s directory if missing.
+    Returns the path to the user's BBDown binary.
+    """
+    ud = user_dir(username)
+    dest = os.path.join(ud, "BBDown")
+    if not os.path.exists(dest):
+        if not os.path.exists(BBDOWN_SOURCE):
+            raise FileNotFoundError(
+                f"BBDown source binary not found: {BBDOWN_SOURCE}. "
+                f"Place the BBDown binary there or set BBDOWN_SOURCE env var."
+            )
+        shutil.copy2(BBDOWN_SOURCE, dest)
+        os.chmod(dest, 0o755)
+        logger.info(f"复制 BBDown → {username}/ ({dest})")
+    return dest
 
 
+def cookie_available_for(username: str) -> bool:
+    """Check if a specific user has BBDown.data."""
+    data = os.path.join(user_dir(username), "BBDown.data")
+    return os.path.exists(data) and os.path.getsize(data) > 0
+
+
+def scan_logged_in_users() -> list[str]:
+    """Return list of usernames who have a valid BBDown.data."""
+    users: list[str] = []
+    try:
+        for name in os.listdir(WORK_DIR):
+            ud = os.path.join(WORK_DIR, name)
+            if not os.path.isdir(ud):
+                continue
+            data = os.path.join(ud, "BBDown.data")
+            if os.path.exists(data) and os.path.getsize(data) > 0:
+                users.append(name)
+    except Exception:
+        pass
+    return users
+
+
+# ==========================================================================
+#  download
+# ==========================================================================
 def run_bbdown_download(task: dict):
     tid = task["id"]
     url = task["url"]
     mode = task.get("mode", "video")
+    username = task.get("username", "unknown")
 
-    args = [BBDOWN_BIN, "-tv", url, "--work-dir", WORK_DIR]
+    ud = user_dir(username)
+    bbdown = ensure_user_bbdown(username)
+
+    args = [bbdown, "-tv", url]
     if mode == "audio":
         args.append("--audio-only")
 
-    logger.info(f"开始下载 {tid} {url} mode={mode}")
+    logger.info(f"开始下载 {tid} user={username} url={url} mode={mode}")
     proc = subprocess.Popen(
         args,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        cwd=WORK_DIR,
+        cwd=ud,
     )
 
     last_title = ""
@@ -110,9 +160,9 @@ def run_bbdown_download(task: dict):
         logger.error(f"下载失败 {tid} code={proc.returncode}")
         return
 
-    # Find downloaded file
+    # Find downloaded file in user's directory
     files = sorted(
-        _glob.glob(os.path.join(WORK_DIR, "*")), key=os.path.getmtime, reverse=True
+        _glob.glob(os.path.join(ud, "*")), key=os.path.getmtime, reverse=True
     )
     downloaded = None
     for f in files:
@@ -153,29 +203,30 @@ def run_bbdown_download(task: dict):
         )
 
 
+# ==========================================================================
+#  login
+# ==========================================================================
 def run_bbdown_login(task: dict):
     """Start B站 login in a background thread — non-blocking for the worker."""
     import base64
     import threading as _threading
 
     tid = task["id"]
+    username = task.get("username", "unknown")
 
     def _login_thread():
-        logger.info(f"开始B站登录流程 {tid}")
+        logger.info(f"开始B站登录流程 {tid} user={username}")
 
-        # BBDown may write QR PNG to WORK_DIR; also watch the script dir as fallback
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        watch_dirs = [WORK_DIR]
-        if script_dir not in watch_dirs:
-            watch_dirs.append(script_dir)
+        ud = user_dir(username)
+        bbdown = ensure_user_bbdown(username)
+        watch_dir = ud  # only watch the user's own directory
 
-        # Start BBDown
         proc = subprocess.Popen(
-            [BBDOWN_BIN, "login"],
+            [bbdown, "login"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            cwd=WORK_DIR,
+            cwd=ud,
         )
 
         qr_sent = False
@@ -183,28 +234,27 @@ def run_bbdown_login(task: dict):
         # ---- Phase 1: wait for qrcode.png ----
         qr_deadline = time.time() + 120
         while not qr_sent and proc.poll() is None and time.time() < qr_deadline:
-            for d in watch_dirs:
-                fpath = os.path.join(d, "qrcode.png")
-                if os.path.isfile(fpath):
-                    try:
-                        time.sleep(0.3)
-                        with open(fpath, "rb") as f:
-                            b64 = base64.b64encode(f.read()).decode("ascii")
-                        requests.post(
-                            f"{CLOUD_URL}/api/worker/qrcode/{tid}",
-                            json={
-                                "qrcode": "[QR图片]",
-                                "image": f"data:image/png;base64,{b64}",
-                            },
-                            headers=HEADERS,
-                            timeout=10,
-                        )
-                        os.remove(fpath)
-                        qr_sent = True
-                        logger.info(f"二维码已上报并删除 {tid}")
-                        break
-                    except Exception as e:
-                        logger.warning(f"处理二维码失败: {e}")
+            fpath = os.path.join(watch_dir, "qrcode.png")
+            if os.path.isfile(fpath):
+                try:
+                    time.sleep(0.3)
+                    with open(fpath, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode("ascii")
+                    requests.post(
+                        f"{CLOUD_URL}/api/worker/qrcode/{tid}",
+                        json={
+                            "qrcode": "[QR图片]",
+                            "image": f"data:image/png;base64,{b64}",
+                        },
+                        headers=HEADERS,
+                        timeout=10,
+                    )
+                    os.remove(fpath)
+                    qr_sent = True
+                    logger.info(f"二维码已上报并删除 {tid}")
+                    break
+                except Exception as e:
+                    logger.warning(f"处理二维码失败: {e}")
             time.sleep(1)
 
         if not qr_sent:
@@ -217,9 +267,9 @@ def run_bbdown_login(task: dict):
             logger.error(f"二维码超时 {tid}")
             return
 
-        # ---- Phase 2: wait for user to scan (BBDown exits on success/failure) ----
+        # ---- Phase 2: wait for user to scan ----
         try:
-            proc.wait(timeout=300)  # 5 minutes for user to scan
+            proc.wait(timeout=300)
         except subprocess.TimeoutExpired:
             proc.kill()
             requests.post(
@@ -230,34 +280,37 @@ def run_bbdown_login(task: dict):
             logger.error(f"登录超时 {tid}")
             return
 
-        if proc.returncode == 0 and cookie_available():
+        if proc.returncode == 0 and cookie_available_for(username):
             requests.post(
                 f"{CLOUD_URL}/api/worker/login-success/{tid}",
                 headers=HEADERS,
                 timeout=10,
             )
-            logger.info(f"B站登录成功 {tid}")
+            logger.info(f"B站登录成功 {tid} user={username}")
         else:
             requests.post(
                 f"{CLOUD_URL}/api/worker/fail/{tid}",
                 json={"error": f"登录失败，退出码 {proc.returncode}"},
                 headers=HEADERS,
             )
-            logger.error(f"B站登录失败 {tid} exit={proc.returncode}")
+            logger.error(f"B站登录失败 {tid} user={username} exit={proc.returncode}")
 
     t = _threading.Thread(target=_login_thread, daemon=True)
     t.start()
 
 
+# ==========================================================================
+#  main loop
+# ==========================================================================
 def main():
     logger.info(f"Worker 启动, cloud={CLOUD_URL}, work_dir={WORK_DIR}")
-    logger.info(f"BBDown cookie: {'可用' if cookie_available() else '不可用'}")
+    logger.info(f"BBDown source: {BBDOWN_SOURCE}")
 
     consecutive_errors = 0
 
     while True:
         try:
-            params = {"cookie_available": "true" if cookie_available() else "false"}
+            params = {"logged_in_users": ",".join(scan_logged_in_users())}
             resp = requests.get(
                 f"{CLOUD_URL}/api/worker/poll",
                 params=params,
@@ -272,15 +325,17 @@ def main():
             elif task.get("type") == "login":
                 run_bbdown_login(task)
             elif task.get("type") == "bilibili_logout":
-                # Delete BBDown.data — next poll will report cookie_available=false
-                if os.path.exists(BBDOWN_DATA_FILE):
-                    os.remove(BBDOWN_DATA_FILE)
-                    logger.info("已删除 BBDown.data（退出B站登录）")
+                username = task.get("username", "")
+                if username:
+                    data_file = os.path.join(user_dir(username), "BBDown.data")
+                    if os.path.exists(data_file):
+                        os.remove(data_file)
+                        logger.info(f"已删除 BBDown.data user={username}")
                 else:
-                    logger.info("BBDown.data 不存在，无需删除")
+                    logger.warning("bilibili_logout task missing username")
             # "wait" type naturally loops back to poll
         except requests.exceptions.ReadTimeout:
-            continue  # long poll timeout, re-poll
+            continue
         except requests.exceptions.ConnectionError as e:
             consecutive_errors += 1
             wait = min(consecutive_errors * 5, 60)

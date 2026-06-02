@@ -195,7 +195,7 @@ def test_worker_login_success(client):
 
     client.post(f"/api/worker/login-success/{tid}",
                 headers={"Authorization": "Bearer test-worker-token"})
-    assert client.application.config["bilibili_logged_in"] is True
+    assert client.application.config["bilibili_logged_in"] == {"admin"}
 
 
 def test_worker_complete_upload(client):
@@ -215,13 +215,13 @@ def test_worker_complete_upload(client):
 
 
 def test_worker_cookie_status(client, app):
-    client.get("/api/worker/poll?cookie_available=true",
+    client.get("/api/worker/poll?logged_in_users=bob,alice",
                headers={"Authorization": "Bearer test-worker-token"})
-    assert app.config["bilibili_logged_in"] is True
+    assert app.config["bilibili_logged_in"] == {"bob", "alice"}
 
-    client.get("/api/worker/poll?cookie_available=false",
+    client.get("/api/worker/poll?logged_in_users=",
                headers={"Authorization": "Bearer test-worker-token"})
-    assert app.config["bilibili_logged_in"] is False
+    assert app.config["bilibili_logged_in"] == set()
 
 
 # === User management ===

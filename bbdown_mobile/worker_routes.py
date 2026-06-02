@@ -49,21 +49,20 @@ def worker_poll():
     """Worker polls for the next task.
 
     Query params:
-        cookie_available= (optional)  "true" / "false" — updates bilibili_logged_in
+        logged_in_users= (optional)  comma-separated usernames with valid BBDown.data
     Returns:
         A task dict immediately if one is available, otherwise blocks for up
         to 60 s.  If no task arrives, returns {"type":"wait","retry_after":5}.
     """
-    # 1. update bilibili cookie status from worker's report
-    cookie_val = request.args.get("cookie_available", "").strip().lower()
-    if cookie_val in ("true", "false"):
-        wanted = cookie_val == "true"
-        if current_app.config["bilibili_logged_in"] != wanted:
-            current_app.config["bilibili_logged_in"] = wanted
-            tq = current_app.config["task_queue"]
-            tq.sse_publish_global("status:bilibili_update", {"logged_in": wanted})
-
+    # 1. update bilibili login status per-user from worker's report
+    users_str = request.args.get("logged_in_users", "")
+    logged_in = set(u.strip() for u in users_str.split(",") if u.strip())
     tq = current_app.config["task_queue"]
+    if current_app.config["bilibili_logged_in"] != logged_in:
+        current_app.config["bilibili_logged_in"] = logged_in
+        tq.sse_publish_global("status:bilibili_update", {"users": list(logged_in)})
+
+    tq = current_app.config["task_queue"]  # re-fetch in case another thread mutated
 
     # 2. try to pop immediately
     task = tq.pop_pending()
@@ -127,13 +126,17 @@ def worker_qrcode(task_id):
 # ------------------------------------------------------------------
 @worker_bp.route("/login-success/<task_id>", methods=["POST"])
 def worker_login_success(task_id):
-    current_app.config["bilibili_logged_in"] = True
     tq = current_app.config["task_queue"]
+    task = tq.get(task_id)
+    username = task.get("username") if task else None
+    if username:
+        current_app.config["bilibili_logged_in"].add(username)
     tq.update(task_id, status="completed")
     tq.sse_publish_task(task_id, "login:success", {"task_id": task_id})
     tq.sse_publish_global("login:success", {"task_id": task_id})
-    tq.sse_publish_global("status:bilibili_update", {"logged_in": True})
-    logger.info("B站登录成功 task_id=%s", task_id)
+    tq.sse_publish_global("status:bilibili_update",
+                          {"users": list(current_app.config["bilibili_logged_in"])})
+    logger.info("B站登录成功 task_id=%s user=%s", task_id, username)
     return {"ok": True}
 
 
