@@ -350,8 +350,10 @@ function closeQrModal() {
   document.getElementById('qrModal').classList.remove('active');
 }
 
-function clearTasks() {
-  // Only remove completed and failed tasks, keep active ones
+async function clearTasks() {
+  // Call server to delete files and clear tasks
+  await fetch(SCRIPT_ROOT + '/api/tasks/clear', {method: 'POST'});
+  // Remove completed/failed from local display
   for (const [id, t] of Object.entries(tasks)) {
     if (t.status === 'completed' || t.status === 'failed') delete tasks[id];
   }

@@ -104,11 +104,13 @@ def _start_cleanup_thread(app: Flask):
     from pathlib import Path
 
     def cleanup():
+        _logger = logging.getLogger("bbdown")
         while True:
             _time.sleep(600)  # every 10 minutes
             tq = app.config["task_queue"]
             dl_dir = Path(app.config["downloads_dir"])
             now = _time.time()
+            # 1. Clean files tracked by tasks (completed, older than 1h)
             with tq._lock:
                 for tid, task in list(tq._tasks.items()):
                     if task["status"] == "completed" and task.get("file_path"):
@@ -117,7 +119,21 @@ def _start_cleanup_thread(app: Flask):
                         if age_hours >= 1 and fp.exists():
                             fp.unlink()
                             task["file_path"] = ""
-                            logging.getLogger("bbdown").info(f"清理文件 {tid} {fp.name}")
+                            _logger.info(f"清理文件 {tid} {fp.name}")
+            # 2. Clean orphan files (no corresponding task, older than 24h)
+            #    Handles files left behind after server restart
+            if dl_dir.exists():
+                tracked = set()
+                with tq._lock:
+                    for task in tq._tasks.values():
+                        if task.get("file_path"):
+                            tracked.add(task["file_path"])
+                for f in dl_dir.iterdir():
+                    if f.is_file() and str(f) not in tracked:
+                        age_hours = (now - f.stat().st_mtime) / 3600
+                        if age_hours >= 24:
+                            f.unlink()
+                            _logger.info(f"清理孤立文件 {f.name}")
 
     t = threading.Thread(target=cleanup, daemon=True)
     t.start()

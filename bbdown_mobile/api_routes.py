@@ -144,6 +144,27 @@ def api_tasks():
              and t.get("username") == session["user"]]
     return jsonify(tasks)
 
+@api_bp.route("/api/tasks/clear", methods=["POST"])
+@login_required
+def api_tasks_clear():
+    """Remove current user's completed/failed tasks and delete their files."""
+    tq = current_app.config["task_queue"]
+    removed = 0
+    with tq._lock:
+        for tid, task in list(tq._tasks.items()):
+            if task.get("username") != session["user"]:
+                continue
+            if task["status"] not in ("completed", "failed"):
+                continue
+            fp = task.get("file_path")
+            if fp and os.path.exists(fp):
+                os.remove(fp)
+                logger.info(f"用户清空文件 {tid} {os.path.basename(fp)}")
+            del tq._tasks[tid]
+            removed += 1
+    logger.info(f"{session['user']} 清空下载列表, 删除 {removed} 个任务")
+    return {"ok": True, "removed": removed}
+
 @api_bp.route("/api/status", methods=["GET"])
 @login_required
 def api_status():
