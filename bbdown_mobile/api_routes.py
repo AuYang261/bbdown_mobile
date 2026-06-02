@@ -233,11 +233,13 @@ def api_users_change_password():
     old_pw = data.get("old_password", "")
     new_pw = data.get("new_password", "")
 
-    if not target or not old_pw or not new_pw:
-        return {"error": "用户名、旧密码、新密码均不能为空"}, 400
-
     app = current_app
     is_admin = session.get("is_admin", False)
+
+    if not target or not new_pw:
+        return {"error": "用户名、新密码不能为空"}, 400
+    if not is_admin and not old_pw:
+        return {"error": "旧密码不能为空"}, 400
 
     if not is_admin and target != session["user"]:
         return {"error": "只能修改自己的密码"}, 403
