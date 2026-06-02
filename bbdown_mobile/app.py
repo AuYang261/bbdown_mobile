@@ -23,6 +23,12 @@ def create_app(instance_path: str | None = None) -> Flask:
     app.config["ADMIN_PASSWORD"] = os.environ["ADMIN_PASSWORD"]
     app.config["SECRET_TOKEN"] = os.environ["SECRET_TOKEN"]
 
+    # Secure session cookie
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
+
     # Hash admin password so we never keep it in plaintext
     salt, h = hash_password(os.environ["ADMIN_PASSWORD"])
     app.config["_admin_salt"] = salt
@@ -64,6 +70,22 @@ def create_app(instance_path: str | None = None) -> Flask:
     app.config["bilibili_logged_in"] = set()  # set of usernames with valid BBDown.data
     app.config["downloads_dir"] = os.path.join(os.path.dirname(__file__), "downloads")
     os.makedirs(app.config["downloads_dir"], exist_ok=True)
+
+    # --- Security headers ---
+    @app.after_request
+    def _add_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # CSP: allow inline styles (used in templates) and same-origin resources
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "script-src 'self' 'unsafe-inline'"
+        )
+        return response
 
     # --- Register blueprints ---
     from api_routes import api_bp

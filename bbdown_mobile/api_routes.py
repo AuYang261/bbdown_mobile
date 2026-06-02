@@ -139,7 +139,9 @@ def api_bilibili_logout():
 @login_required
 def api_tasks():
     tq = current_app.config["task_queue"]
-    tasks = [t for t in tq.list_all() if t.get("type") not in ("login", "bilibili_logout")]
+    tasks = [t for t in tq.list_all()
+             if t.get("type") not in ("login", "bilibili_logout")
+             and t.get("username") == session["user"]]
     return jsonify(tasks)
 
 @api_bp.route("/api/status", methods=["GET"])
@@ -157,10 +159,17 @@ def api_events():
 
     def generate():
         sub = tq.sse_subscribe_global()
+        current_user = session["user"]
         try:
             while True:
                 msg = sub.wait(timeout=15)
                 if msg:
+                    # Filter: only forward events belonging to current user
+                    tid = msg["data"].get("task_id")
+                    if tid:
+                        task = tq.get(tid)
+                        if task and task.get("username") != current_user:
+                            continue
                     yield f"event: {msg['event']}\ndata: {_json.dumps(msg['data'])}\n\n"
                 else:
                     yield ": heartbeat\n\n"
@@ -176,6 +185,8 @@ def api_file(task_id):
     tq = current_app.config["task_queue"]
     task = tq.get(task_id)
     if not task or task["status"] != "completed" or not task.get("file_path"):
+        return {"error": "文件不存在或尚未完成"}, 404
+    if task.get("username") != session["user"]:
         return {"error": "文件不存在或尚未完成"}, 404
     fpath = task["file_path"]
     if not os.path.exists(fpath):

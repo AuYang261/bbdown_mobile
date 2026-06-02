@@ -180,6 +180,11 @@ const evtSource = new EventSource(SCRIPT_ROOT + '/api/events');
 const tasks = {};
 let bilibiliLoggedIn = false;
 
+// HTML escape helper
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ===== segmented mode toggle =====
 (function() {
   const seg = document.getElementById('modeSeg');
@@ -354,13 +359,13 @@ function renderTasks() {
       body = '<a class="btn-save" href="' + SCRIPT_ROOT + '/api/file/' + t.id + '">💾 保存文件</a>';
       cssClass = ' task-completed';
     } else if (t.status === 'failed') {
-      body = '<div class="task-error">❌ ' + (t.error || '下载失败') + '</div>';
+      body = '<div class="task-error">❌ ' + escHtml(t.error || '下载失败') + '</div>';
       cssClass = ' task-failed';
     } else {
       body = '<div class="task-status pending">⏳ 等待中...</div>';
     }
     return '<div class="task-card' + cssClass + '">' +
-           '<div class="task-title">' + (t.title || t.url || '(无标题)') + '</div>' +
+           '<div class="task-title">' + escHtml(t.title || t.url || '(无标题)') + '</div>' +
            '<div class="task-meta">' + modeBadge + '</div>' + body + '</div>';
   }).join('');
 }
