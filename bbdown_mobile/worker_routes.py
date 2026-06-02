@@ -164,7 +164,7 @@ def worker_complete(task_id):
 
     tq = current_app.config["task_queue"]
     tq.update(task_id, status="completed", file_path=filepath,
-              completed_at=_time.time())
+              completed_at=_time.time(), orig_name=orig_name)
 
     tq.sse_publish_task(task_id, "download:complete",
                         {"task_id": task_id, "file_path": filepath,

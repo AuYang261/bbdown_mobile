@@ -196,7 +196,8 @@ def api_file(task_id):
         return {"error": "文件已被清理"}, 404
     logger.info(f"{session['user']} 下载文件 {task_id} {os.path.basename(fpath)}")
     audit.info(f"SAVE   | user={session['user']} | task={task_id} | file={os.path.basename(fpath)}")
-    return send_file(fpath, as_attachment=True, download_name=os.path.basename(fpath))
+    download_name = task.get("orig_name") or os.path.basename(fpath)
+    return send_file(fpath, as_attachment=True, download_name=download_name)
 
 # --- User management API ---
 
