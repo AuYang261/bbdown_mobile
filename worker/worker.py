@@ -166,7 +166,7 @@ def run_bbdown_download(task: dict):
     )
     downloaded = None
     for f in files:
-        if os.path.isfile(f) and not f.endswith(".txt") and not f.endswith(".config"):
+        if os.path.isfile(f) and not f.endswith(".txt") and not f.endswith(".config") and 'BBDown' not in f:
             downloaded = f
             break
 
