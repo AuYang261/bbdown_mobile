@@ -140,30 +140,26 @@ def _execute_bbdown(args: list[str], cwd: str, tid: str, url: str):
     return proc.returncode, output_lines
 
 
-def _find_downloaded_file(directory: str, before_files: set[str]) -> str | None:
-    """Find newly-created media file(s) after a download run.
-
-    Uses a before→after snapshot diff + media-extension whitelist so we don't
-    mistake unrelated files (qrcode.png, BBDown binaries, old downloads, etc.)
-    for the fresh download.
-    """
+def _pick_file_from_dir(directory: str) -> str | None:
+    """Return a media file found in *directory* (expected to be a per-task temp dir)."""
     try:
-        after = set(os.path.join(directory, f) for f in os.listdir(directory))
+        entries = os.listdir(directory)
     except Exception:
         return None
-    new_files = after - before_files
 
-    # Prefer files with known media extensions (largest first)
-    for f in sorted(new_files, key=os.path.getsize, reverse=True):
-        if not os.path.isfile(f):
+    # Largest media file first
+    for f in sorted(entries, key=lambda n: os.path.getsize(os.path.join(directory, n)), reverse=True):
+        fp = os.path.join(directory, f)
+        if not os.path.isfile(fp):
             continue
         if os.path.splitext(f)[1].lower() in MEDIA_EXTENSIONS:
-            return f
+            return fp
 
-    # Fallback: any new regular file that isn't BBDown itself
-    for f in sorted(new_files, key=os.path.getsize, reverse=True):
-        if os.path.isfile(f) and "BBDown" not in os.path.basename(f):
-            return f
+    # Fallback: any regular file that isn't BBDown itself
+    for f in entries:
+        fp = os.path.join(directory, f)
+        if os.path.isfile(fp) and "BBDown" not in f:
+            return fp
 
     return None
 
@@ -180,91 +176,92 @@ def run_bbdown_download(task: dict):
     ud = user_dir(username)
     bbdown = ensure_user_bbdown(username)
 
-    # Snapshot files before download so we can reliably identify new output
+    # Per-task temp directory — isolates each download completely.
+    # BBDown writes output to cwd, BBDown.data is alongside the binary in ud.
+    task_dir = os.path.join(ud, tid)
+    os.makedirs(task_dir, exist_ok=True)
+
     try:
-        before_files = set(os.path.join(ud, f) for f in os.listdir(ud))
-    except Exception:
-        before_files = set()
-
-    # ---- Attempt 1: with -tv (TV API) ----
-    args = [bbdown, "-tv", url]
-    if mode == "audio":
-        args.append("--audio-only")
-
-    logger.info(f"开始下载 {tid} user={username} url={url} mode={mode} (try -tv)")
-    rc, output_lines = _execute_bbdown(args, ud, tid, url)
-
-    # ---- Timeout on first try ----
-    if rc is None:
-        requests.post(
-            f"{CLOUD_URL}/api/worker/fail/{tid}",
-            json={"error": "下载超时"},
-            headers=HEADERS,
-        )
-        logger.error(f"下载超时 {tid}")
-        return
-
-    downloaded = _find_downloaded_file(ud, before_files)
-
-    # ---- Attempt 2: fallback without -tv ----
-    # BBDown may exit 0 even when -tv fails on unsupported videos,
-    # so we check whether a file actually appeared.
-    if not downloaded:
-        logger.warning(f"-tv 未生成下载文件 {tid} (exit={rc})，回退不带 -tv 重试")
-        args = [bbdown, url]
+        # ---- Attempt 1: with -tv (TV API) ----
+        args = [bbdown, "-tv", url]
         if mode == "audio":
             args.append("--audio-only")
-        rc, output_lines = _execute_bbdown(args, ud, tid, url)
 
+        logger.info(f"开始下载 {tid} user={username} url={url} mode={mode} (try -tv)")
+        rc, output_lines = _execute_bbdown(args, task_dir, tid, url)
+
+        # ---- Timeout on first try ----
         if rc is None:
             requests.post(
                 f"{CLOUD_URL}/api/worker/fail/{tid}",
                 json={"error": "下载超时"},
                 headers=HEADERS,
             )
-            logger.error(f"重试下载超时 {tid}")
+            logger.error(f"下载超时 {tid}")
             return
 
-        downloaded = _find_downloaded_file(ud, before_files)
+        downloaded = _pick_file_from_dir(task_dir)
 
-    # ---- Final failure (both attempts produced no file) ----
-    if not downloaded:
-        error_msg = (
-            "\n".join(output_lines[-10:]) if output_lines else "下载完成但未生成文件"
-        )
-        requests.post(
-            f"{CLOUD_URL}/api/worker/fail/{tid}",
-            json={"error": error_msg},
-            headers=HEADERS,
-        )
-        logger.error(f"下载失败 {tid} — 未生成文件")
-        return
+        # ---- Attempt 2: fallback without -tv ----
+        # BBDown may exit 0 even when -tv fails on unsupported videos,
+        # so we check whether a file actually appeared.
+        if not downloaded:
+            logger.warning(f"-tv 未生成下载文件 {tid} (exit={rc})，回退不带 -tv 重试")
+            args = [bbdown, url]
+            if mode == "audio":
+                args.append("--audio-only")
+            rc, output_lines = _execute_bbdown(args, task_dir, tid, url)
 
-    # ---- Upload downloaded file ----
+            if rc is None:
+                requests.post(
+                    f"{CLOUD_URL}/api/worker/fail/{tid}",
+                    json={"error": "下载超时"},
+                    headers=HEADERS,
+                )
+                logger.error(f"重试下载超时 {tid}")
+                return
 
-    fname = os.path.basename(downloaded)
-    fsize_mb = os.path.getsize(downloaded) / 1024 / 1024
-    logger.info(f"上传文件 {tid} {fname} ({fsize_mb:.1f}MB)")
-    try:
-        with open(downloaded, "rb") as f:
-            resp = requests.post(
-                f"{CLOUD_URL}/api/worker/complete/{tid}",
-                files={"file": (fname, f)},
-                headers=HEADERS,
-                timeout=600,
+            downloaded = _pick_file_from_dir(task_dir)
+
+        # ---- Final failure (both attempts produced no file) ----
+        if not downloaded:
+            error_msg = (
+                "\n".join(output_lines[-10:]) if output_lines else "下载完成但未生成文件"
             )
-        if resp.ok:
-            logger.info(f"上传完成 {tid}")
-            os.remove(downloaded)
-        else:
-            raise Exception(f"Server returned {resp.status_code}")
-    except Exception as e:
-        logger.error(f"上传失败 {tid}: {e}")
-        requests.post(
-            f"{CLOUD_URL}/api/worker/fail/{tid}",
-            json={"error": f"上传失败: {e}"},
-            headers=HEADERS,
-        )
+            requests.post(
+                f"{CLOUD_URL}/api/worker/fail/{tid}",
+                json={"error": error_msg},
+                headers=HEADERS,
+            )
+            logger.error(f"下载失败 {tid} — 未生成文件")
+            return
+
+        # ---- Upload downloaded file ----
+        fname = os.path.basename(downloaded)
+        fsize_mb = os.path.getsize(downloaded) / 1024 / 1024
+        logger.info(f"上传文件 {tid} {fname} ({fsize_mb:.1f}MB)")
+        try:
+            with open(downloaded, "rb") as f:
+                resp = requests.post(
+                    f"{CLOUD_URL}/api/worker/complete/{tid}",
+                    files={"file": (fname, f)},
+                    headers=HEADERS,
+                    timeout=600,
+                )
+            if resp.ok:
+                logger.info(f"上传完成 {tid}")
+            else:
+                raise Exception(f"Server returned {resp.status_code}")
+        except Exception as e:
+            logger.error(f"上传失败 {tid}: {e}")
+            requests.post(
+                f"{CLOUD_URL}/api/worker/fail/{tid}",
+                json={"error": f"上传失败: {e}"},
+                headers=HEADERS,
+            )
+    finally:
+        # Always clean up the per-task temp directory
+        shutil.rmtree(task_dir, ignore_errors=True)
 
 
 # ==========================================================================
