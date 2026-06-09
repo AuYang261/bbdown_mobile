@@ -7,7 +7,6 @@ import time
 import subprocess
 import re
 import logging
-import glob as _glob
 import requests
 
 logging.basicConfig(
@@ -29,6 +28,12 @@ BBDOWN_SOURCE = os.environ.get("BBDOWN_SOURCE", os.path.join(script_dir, "BBDown
 os.makedirs(WORK_DIR, exist_ok=True)
 
 HEADERS = {"Authorization": f"Bearer {SECRET_TOKEN}"}
+
+# Known media extensions BBDown can produce
+MEDIA_EXTENSIONS = {
+    ".mp4", ".m4a", ".mkv", ".flv", ".mp3", ".aac",
+    ".wav", ".webm", ".mov", ".ts", ".avi", ".wmv", ".flac",
+}
 
 
 def user_dir(username: str) -> str:
@@ -79,28 +84,18 @@ def scan_logged_in_users() -> list[str]:
 
 
 # ==========================================================================
-#  download
+#  download helpers
 # ==========================================================================
-def run_bbdown_download(task: dict):
-    tid = task["id"]
-    url = task["url"]
-    mode = task.get("mode", "video")
-    username = task.get("username", "unknown")
 
-    ud = user_dir(username)
-    bbdown = ensure_user_bbdown(username)
-
-    args = [bbdown, "-tv", url]
-    if mode == "audio":
-        args.append("--audio-only")
-
-    logger.info(f"开始下载 {tid} user={username} url={url} mode={mode}")
+def _execute_bbdown(args: list[str], cwd: str, tid: str, url: str):
+    """Run BBDown, streaming progress to cloud. Returns (returncode, output_lines).
+    returncode is None when the process timed out (killed by us)."""
     proc = subprocess.Popen(
         args,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        cwd=ud,
+        cwd=cwd,
     )
 
     last_title = ""
@@ -140,6 +135,67 @@ def run_bbdown_download(task: dict):
         proc.wait(timeout=3600)
     except subprocess.TimeoutExpired:
         proc.kill()
+        return None, output_lines
+
+    return proc.returncode, output_lines
+
+
+def _find_downloaded_file(directory: str, before_files: set[str]) -> str | None:
+    """Find newly-created media file(s) after a download run.
+
+    Uses a before→after snapshot diff + media-extension whitelist so we don't
+    mistake unrelated files (qrcode.png, BBDown binaries, old downloads, etc.)
+    for the fresh download.
+    """
+    try:
+        after = set(os.path.join(directory, f) for f in os.listdir(directory))
+    except Exception:
+        return None
+    new_files = after - before_files
+
+    # Prefer files with known media extensions (largest first)
+    for f in sorted(new_files, key=os.path.getsize, reverse=True):
+        if not os.path.isfile(f):
+            continue
+        if os.path.splitext(f)[1].lower() in MEDIA_EXTENSIONS:
+            return f
+
+    # Fallback: any new regular file that isn't BBDown itself
+    for f in sorted(new_files, key=os.path.getsize, reverse=True):
+        if os.path.isfile(f) and "BBDown" not in os.path.basename(f):
+            return f
+
+    return None
+
+
+# ==========================================================================
+#  download
+# ==========================================================================
+def run_bbdown_download(task: dict):
+    tid = task["id"]
+    url = task["url"]
+    mode = task.get("mode", "video")
+    username = task.get("username", "unknown")
+
+    ud = user_dir(username)
+    bbdown = ensure_user_bbdown(username)
+
+    # Snapshot files before download so we can reliably identify new output
+    try:
+        before_files = set(os.path.join(ud, f) for f in os.listdir(ud))
+    except Exception:
+        before_files = set()
+
+    # ---- Attempt 1: with -tv (TV API) ----
+    args = [bbdown, "-tv", url]
+    if mode == "audio":
+        args.append("--audio-only")
+
+    logger.info(f"开始下载 {tid} user={username} url={url} mode={mode} (try -tv)")
+    rc, output_lines = _execute_bbdown(args, ud, tid, url)
+
+    # ---- Timeout on first try ----
+    if rc is None:
         requests.post(
             f"{CLOUD_URL}/api/worker/fail/{tid}",
             json={"error": "下载超时"},
@@ -148,35 +204,43 @@ def run_bbdown_download(task: dict):
         logger.error(f"下载超时 {tid}")
         return
 
-    if proc.returncode != 0:
+    downloaded = _find_downloaded_file(ud, before_files)
+
+    # ---- Attempt 2: fallback without -tv ----
+    # BBDown may exit 0 even when -tv fails on unsupported videos,
+    # so we check whether a file actually appeared.
+    if not downloaded:
+        logger.warning(f"-tv 未生成下载文件 {tid} (exit={rc})，回退不带 -tv 重试")
+        args = [bbdown, url]
+        if mode == "audio":
+            args.append("--audio-only")
+        rc, output_lines = _execute_bbdown(args, ud, tid, url)
+
+        if rc is None:
+            requests.post(
+                f"{CLOUD_URL}/api/worker/fail/{tid}",
+                json={"error": "下载超时"},
+                headers=HEADERS,
+            )
+            logger.error(f"重试下载超时 {tid}")
+            return
+
+        downloaded = _find_downloaded_file(ud, before_files)
+
+    # ---- Final failure (both attempts produced no file) ----
+    if not downloaded:
         error_msg = (
-            "\n".join(output_lines[-10:]) if output_lines else "BBDown 返回非零退出码"
+            "\n".join(output_lines[-10:]) if output_lines else "下载完成但未生成文件"
         )
         requests.post(
             f"{CLOUD_URL}/api/worker/fail/{tid}",
             json={"error": error_msg},
             headers=HEADERS,
         )
-        logger.error(f"下载失败 {tid} code={proc.returncode}")
+        logger.error(f"下载失败 {tid} — 未生成文件")
         return
 
-    # Find downloaded file in user's directory
-    files = sorted(
-        _glob.glob(os.path.join(ud, "*")), key=os.path.getmtime, reverse=True
-    )
-    downloaded = None
-    for f in files:
-        if os.path.isfile(f) and not f.endswith(".txt") and not f.endswith(".config") and 'BBDown' not in f:
-            downloaded = f
-            break
-
-    if not downloaded:
-        requests.post(
-            f"{CLOUD_URL}/api/worker/fail/{tid}",
-            json={"error": "下载完成但找不到输出文件"},
-            headers=HEADERS,
-        )
-        return
+    # ---- Upload downloaded file ----
 
     fname = os.path.basename(downloaded)
     fsize_mb = os.path.getsize(downloaded) / 1024 / 1024
