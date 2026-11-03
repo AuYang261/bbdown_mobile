@@ -14,5 +14,13 @@
     return match ? match[0].replace(TRAILING_PUNCTUATION, "") : original;
   }
 
-  return { extractUrlFromText };
+  function normalizeDownloadUrlInput(input) {
+    const extracted = extractUrlFromText(input.value);
+    if (extracted !== input.value) {
+      input.value = extracted;
+    }
+    return extracted;
+  }
+
+  return { extractUrlFromText, normalizeDownloadUrlInput };
 });

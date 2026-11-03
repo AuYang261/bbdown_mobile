@@ -185,11 +185,7 @@ let bilibiliLoggedIn = false;
 const urlInput = document.getElementById('urlInput');
 
 function normalizeUrlInput() {
-  const extracted = window.extractUrlFromText(urlInput.value);
-  if (extracted !== urlInput.value) {
-    urlInput.value = extracted;
-  }
-  return extracted;
+  return window.normalizeDownloadUrlInput(urlInput);
 }
 
 urlInput.addEventListener('input', normalizeUrlInput);
