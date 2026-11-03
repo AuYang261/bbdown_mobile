@@ -4,6 +4,7 @@
     module.exports = utils;
   }
   root.extractUrlFromText = utils.extractUrlFromText;
+  root.normalizeDownloadUrlInput = utils.normalizeDownloadUrlInput;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   const URL_PATTERN = /https?:\/\/[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%-]+/i;
   const TRAILING_PUNCTUATION = /[.,;:!?)\]}>]+$/;
