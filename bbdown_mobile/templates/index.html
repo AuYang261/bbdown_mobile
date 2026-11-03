@@ -112,7 +112,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <!-- form -->
 <div class="form-area">
-  <input type="text" id="urlInput" placeholder="粘贴B站链接（BV号或完整URL）..." autofocus>
+  <input type="text" id="urlInput" placeholder="粘贴B站链接或整段分享文字..." autofocus>
   <div class="segmented" id="modeSeg">
     <label data-value="video" class="active"><input type="radio" name="mode" value="video" checked> 🎬 视频+音频</label>
     <label data-value="audio"><input type="radio" name="mode" value="audio"> 🎵 仅音频</label>
@@ -175,12 +175,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
 </div>
 
+<script src="{{ request.script_root }}/static/url_utils.js"></script>
 <script>
 const SCRIPT_ROOT = "{{ request.script_root }}";
 const CURRENT_USER = "{{ session['user'] }}";
 const evtSource = new EventSource(SCRIPT_ROOT + '/api/events');
 const tasks = {};
 let bilibiliLoggedIn = false;
+const urlInput = document.getElementById('urlInput');
+
+function normalizeUrlInput() {
+  const extracted = window.extractUrlFromText(urlInput.value);
+  if (extracted !== urlInput.value) {
+    urlInput.value = extracted;
+  }
+  return extracted;
+}
+
+urlInput.addEventListener('input', normalizeUrlInput);
+urlInput.addEventListener('paste', () => setTimeout(normalizeUrlInput, 0));
 
 // SSE connection health
 let sseOk = true;
@@ -320,7 +333,7 @@ async function loadTasks() {
 loadTasks();
 
 async function submitDownload() {
-  const url = document.getElementById('urlInput').value.trim();
+  const url = normalizeUrlInput();
   if (!url) return;
   const mode = document.querySelector('input[name="mode"]:checked').value;
   const resp = await fetch(SCRIPT_ROOT + '/api/download', {

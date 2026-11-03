@@ -101,6 +101,23 @@ def test_download_default_mode(client):
     assert "task_id" in resp.get_json()
 
 
+def test_download_extracts_url_from_share_text(client):
+    client.post("/api/login", json={"username": "admin", "password": "test123"})
+    share_text = "【测试视频】 https://b23.tv/kkwWxgx，分享自哔哩哔哩"
+
+    resp = client.post("/api/download", json={"url": share_text, "mode": "audio"})
+    assert resp.status_code == 200
+
+    task_id = resp.get_json()["task_id"]
+    poll_resp = client.get(
+        "/api/worker/poll",
+        headers={"Authorization": "Bearer test-worker-token"},
+    )
+    task = poll_resp.get_json()
+    assert task["id"] == task_id
+    assert task["url"] == "https://b23.tv/kkwWxgx"
+
+
 def test_tasks_list(client):
     client.post("/api/login", json={"username": "admin", "password": "test123"})
     resp = client.get("/api/tasks")

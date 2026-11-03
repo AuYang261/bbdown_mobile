@@ -1,6 +1,7 @@
 ﻿import logging
 import json as _json
 import os
+import re
 from flask import Blueprint, render_template, request, session, jsonify, send_file, current_app, Response
 from decorators import login_required, admin_required
 from auth import hash_password, verify_password
@@ -8,6 +9,21 @@ from auth import hash_password, verify_password
 logger = logging.getLogger("bbdown")
 audit = logging.getLogger("bbdown.audit")
 api_bp = Blueprint("api", __name__)
+
+_URL_PATTERN = re.compile(
+    r"https?://[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%-]+",
+    re.IGNORECASE,
+)
+_TRAILING_URL_PUNCTUATION = ".,;:!?)]}>"
+
+
+def _extract_download_url(value: object) -> str:
+    """Extract the first HTTP(S) URL from share text; keep bare BV IDs unchanged."""
+    text = str(value or "").strip()
+    match = _URL_PATTERN.search(text)
+    if not match:
+        return text
+    return match.group(0).rstrip(_TRAILING_URL_PUNCTUATION)
 
 # --- Page routes ---
 
@@ -82,7 +98,7 @@ def api_logout():
 @login_required
 def api_download():
     data = request.get_json() or {}
-    url = data.get("url", "").strip()
+    url = _extract_download_url(data.get("url", ""))
     mode = data.get("mode", "video")
     if not url:
         return {"error": "请粘贴B站链接"}, 400
