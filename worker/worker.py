@@ -7,6 +7,7 @@ import time
 import subprocess
 import re
 import logging
+from urllib.parse import parse_qs, urlsplit
 import requests
 
 logging.basicConfig(
@@ -34,6 +35,10 @@ MEDIA_EXTENSIONS = {
     ".mp4", ".m4a", ".mkv", ".flv", ".mp3", ".aac",
     ".wav", ".webm", ".mov", ".ts", ".avi", ".wmv", ".flac",
 }
+
+
+class MultipleMediaFilesError(RuntimeError):
+    """Raised when a single-file task produced a collection of media files."""
 
 
 def user_dir(username: str) -> str:
@@ -140,26 +145,75 @@ def _execute_bbdown(args: list[str], cwd: str, tid: str, url: str):
     return proc.returncode, output_lines
 
 
+def _resolve_download_url(url: str) -> str:
+    """Resolve B站 share links so a selected page in the final URL is retained."""
+    host = (urlsplit(url).hostname or "").lower()
+    if host not in {"b23.tv", "bili2233.cn"}:
+        return url
+
+    try:
+        with requests.get(
+            url,
+            allow_redirects=True,
+            stream=True,
+            timeout=15,
+            headers={"User-Agent": "Mozilla/5.0"},
+        ) as response:
+            response.raise_for_status()
+            return response.url
+    except requests.RequestException as e:
+        logger.warning(f"解析短链接失败，继续使用原链接: {e}")
+        return url
+
+
+def _build_bbdown_args(
+    bbdown: str,
+    url: str,
+    mode: str,
+    *,
+    use_tv: bool,
+    resolved_url: str | None = None,
+) -> list[str]:
+    """Build BBDown arguments for the exact page selected in the browser URL."""
+    selected_url = resolved_url or _resolve_download_url(url)
+    page = parse_qs(urlsplit(selected_url).query).get("p", ["1"])[0]
+    if page.upper() in {"ALL", "LAST", "LATEST"}:
+        page = page.upper()
+    elif not page.isdigit() or int(page) < 1:
+        page = "1"
+
+    args = [bbdown]
+    if use_tv:
+        args.append("-tv")
+    args.extend(["-p", page, url])
+    if mode == "audio":
+        args.append("--audio-only")
+    return args
+
+
 def _pick_file_from_dir(directory: str) -> str | None:
     """Return a media file found in *directory* (expected to be a per-task temp dir)."""
+    media_files = []
+    fallback_files = []
     try:
-        entries = os.listdir(directory)
+        for root, _, files in os.walk(directory):
+            for name in files:
+                fp = os.path.join(root, name)
+                if os.path.splitext(name)[1].lower() in MEDIA_EXTENSIONS:
+                    media_files.append(fp)
+                elif "BBDown" not in name:
+                    fallback_files.append(fp)
     except Exception:
         return None
 
-    # Largest media file first
-    for f in sorted(entries, key=lambda n: os.path.getsize(os.path.join(directory, n)), reverse=True):
-        fp = os.path.join(directory, f)
-        if not os.path.isfile(fp):
-            continue
-        if os.path.splitext(f)[1].lower() in MEDIA_EXTENSIONS:
-            return fp
-
-    # Fallback: any regular file that isn't BBDown itself
-    for f in entries:
-        fp = os.path.join(directory, f)
-        if os.path.isfile(fp) and "BBDown" not in f:
-            return fp
+    for files in (media_files, fallback_files):
+        if files:
+            if len(files) > 1:
+                raise MultipleMediaFilesError(
+                    f"本次下载生成 {len(files)} 个文件，当前任务只能上传一个；"
+                    "请使用带 p= 参数的单集链接"
+                )
+            return max(files, key=os.path.getsize)
 
     return None
 
@@ -180,12 +234,13 @@ def run_bbdown_download(task: dict):
     # BBDown writes output to cwd, BBDown.data is alongside the binary in ud.
     task_dir = os.path.join(ud, tid)
     os.makedirs(task_dir, exist_ok=True)
+    resolved_url = _resolve_download_url(url)
 
     try:
         # ---- Attempt 1: with -tv (TV API) ----
-        args = [bbdown, "-tv", url]
-        if mode == "audio":
-            args.append("--audio-only")
+        args = _build_bbdown_args(
+            bbdown, url, mode, use_tv=True, resolved_url=resolved_url
+        )
 
         logger.info(f"开始下载 {tid} user={username} url={url} mode={mode} (try -tv)")
         rc, output_lines = _execute_bbdown(args, task_dir, tid, url)
@@ -200,16 +255,25 @@ def run_bbdown_download(task: dict):
             logger.error(f"下载超时 {tid}")
             return
 
-        downloaded = _pick_file_from_dir(task_dir)
+        try:
+            downloaded = _pick_file_from_dir(task_dir)
+        except MultipleMediaFilesError as e:
+            requests.post(
+                f"{CLOUD_URL}/api/worker/fail/{tid}",
+                json={"error": str(e)},
+                headers=HEADERS,
+            )
+            logger.error(f"下载失败 {tid} — {e}")
+            return
 
         # ---- Attempt 2: fallback without -tv ----
         # BBDown may exit 0 even when -tv fails on unsupported videos,
         # so we check whether a file actually appeared.
         if not downloaded:
             logger.warning(f"-tv 未生成下载文件 {tid} (exit={rc})，回退不带 -tv 重试")
-            args = [bbdown, url]
-            if mode == "audio":
-                args.append("--audio-only")
+            args = _build_bbdown_args(
+                bbdown, url, mode, use_tv=False, resolved_url=resolved_url
+            )
             rc, output_lines = _execute_bbdown(args, task_dir, tid, url)
 
             if rc is None:
@@ -221,7 +285,16 @@ def run_bbdown_download(task: dict):
                 logger.error(f"重试下载超时 {tid}")
                 return
 
-            downloaded = _pick_file_from_dir(task_dir)
+            try:
+                downloaded = _pick_file_from_dir(task_dir)
+            except MultipleMediaFilesError as e:
+                requests.post(
+                    f"{CLOUD_URL}/api/worker/fail/{tid}",
+                    json={"error": str(e)},
+                    headers=HEADERS,
+                )
+                logger.error(f"下载失败 {tid} — {e}")
+                return
 
         # ---- Final failure (both attempts produced no file) ----
         if not downloaded:

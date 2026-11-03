@@ -103,6 +103,16 @@ chmod +x worker/BBDown
 ./start-worker.sh
 ```
 
+也可以与云服务器部署在同一台机器上，通过回环地址连接 Flask，并使用
+[`bbdown-worker.service`](bbdown-worker.service) 作为 systemd 单元。创建
+`/etc/bbdown-worker.env`：
+
+```bash
+CLOUD_URL=http://127.0.0.1:5001
+SECRET_TOKEN=<与云服务器一致>
+BBDOWN_SOURCE=/www/PythonProjects/bbdown_mobile/worker/BBDown
+```
+
 或通过 systemd:
 ```ini
 [Unit]

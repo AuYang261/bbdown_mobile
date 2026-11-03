@@ -1,0 +1,17 @@
+[Unit]
+Description=BBDown Mobile Worker
+After=network-online.target bbdown-mobile.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/www/PythonProjects/bbdown_mobile/worker
+EnvironmentFile=/etc/bbdown-worker.env
+ExecStart=/root/.local/bin/uv run python worker.py
+Restart=always
+RestartSec=5s
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
